@@ -1,0 +1,29 @@
+{
+  "store": {
+    "name": "Modern POS",
+    "address": "123 Main Street, City, Country",
+    "phone": "+1 234 567 8900",
+    "email": "contact@modernpos.com",
+    "website": "www.modernpos.com"
+  },
+  "tax": {
+    "rate": 10,
+    "inclusive": false
+  },
+  "currency": {
+    "code": "USD",
+    "symbol": "$",
+    "position": "before"
+  },
+  "inventory": {
+    "lowStockThreshold": 10,
+    "outOfStockThreshold": 0,
+    "enableStockTracking": true
+  },
+  "receipt": {
+    "header": "Thank you for shopping with us!",
+    "footer": "Please come again!",
+    "showTaxDetails": true,
+    "showItemizedList": true
+  }
+}
