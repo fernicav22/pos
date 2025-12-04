@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -36,10 +36,18 @@ interface SettingsFormData {
 
 export default function Settings() {
   const { user } = useAuthStore();
-  const { settings, updateSettings } = useSettingsStore();
+  const { settings, updateSettings, loadSettings } = useSettingsStore();
   const [formData, setFormData] = useState<SettingsFormData>(settings);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  useEffect(() => {
+    setFormData(settings as SettingsFormData);
+  }, [settings]);
 
   if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
     return (
@@ -80,7 +88,7 @@ export default function Settings() {
   };
 
   const handleCancel = () => {
-    setFormData(settings);
+    setFormData(settings as SettingsFormData);
     setEditMode(false);
   };
 

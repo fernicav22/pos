@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import defaultSettings from '../config/settings.json';
+import { supabase } from '../lib/supabase';
 
 interface SettingsState {
   settings: typeof defaultSettings;
   formatCurrency: (amount: number) => string;
   calculateTax: (amount: number) => number;
   updateSettings: (newSettings: typeof defaultSettings) => Promise<void>;
+  loadSettings: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -15,7 +17,7 @@ export const useSettingsStore = create<SettingsState>()(
       settings: defaultSettings,
 
       formatCurrency: (amount: number) => {
-        const { code, symbol, position } = get().settings.currency;
+        const { symbol, position } = get().settings.currency;
         const formatted = new Intl.NumberFormat('en-US', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
@@ -32,9 +34,78 @@ export const useSettingsStore = create<SettingsState>()(
         return (amount * rate) / 100;
       },
 
+      loadSettings: async () => {
+        try {
+          const { data, error } = await supabase
+            .from('store_settings')
+            .select('*')
+            .limit(1)
+            .single();
+
+          if (error) throw error;
+
+          if (data) {
+            // Map database fields to settings structure
+            const loadedSettings = {
+              store: {
+                name: data.store_name,
+                address: data.store_address,
+                phone: data.store_phone || '',
+                email: data.store_email || '',
+                website: data.store_website || ''
+              },
+              tax: {
+                rate: Number(data.tax_rate),
+                inclusive: data.tax_inclusive || false
+              },
+              currency: {
+                code: data.currency,
+                symbol: data.currency === 'USD' ? '$' : data.currency,
+                position: 'before' as const
+              },
+              inventory: {
+                lowStockThreshold: data.low_stock_threshold || 5,
+                outOfStockThreshold: 0,
+                enableStockTracking: data.enable_stock_tracking !== false
+              },
+              receipt: {
+                header: data.receipt_header || '',
+                footer: data.receipt_footer || '',
+                showTaxDetails: data.show_tax_details !== false,
+                showItemizedList: data.show_itemized_list !== false
+              }
+            };
+            set({ settings: loadedSettings });
+          }
+        } catch (error) {
+          console.error('Error loading settings:', error);
+          // Keep default settings if loading fails
+        }
+      },
+
       updateSettings: async (newSettings) => {
         try {
-          // Here you could add API calls to save settings to a backend
+          // Save to database
+          const { error } = await supabase.rpc('upsert_store_settings', {
+            p_store_name: newSettings.store.name,
+            p_store_address: newSettings.store.address,
+            p_store_phone: newSettings.store.phone || '',
+            p_store_email: newSettings.store.email || '',
+            p_store_website: newSettings.store.website || '',
+            p_currency: newSettings.currency.code,
+            p_tax_rate: newSettings.tax.rate,
+            p_tax_inclusive: newSettings.tax.inclusive,
+            p_receipt_header: newSettings.receipt.header,
+            p_receipt_footer: newSettings.receipt.footer,
+            p_low_stock_threshold: newSettings.inventory.lowStockThreshold,
+            p_enable_stock_tracking: newSettings.inventory.enableStockTracking,
+            p_show_tax_details: newSettings.receipt.showTaxDetails,
+            p_show_itemized_list: newSettings.receipt.showItemizedList
+          });
+
+          if (error) throw error;
+
+          // Update local state
           set({ settings: newSettings });
         } catch (error) {
           console.error('Error updating settings:', error);
