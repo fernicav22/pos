@@ -4,10 +4,7 @@
 
 [build.environment]
   # These environment variables will be available during the build
-  # You still need to set these in Netlify's dashboard
   NODE_VERSION = "18"
-
-# Configure secrets scanning to allow the Supabase anon key
-# The anon key is designed to be public and used in browser code
-[build.secrets]
-  omit_keys = ["VITE_SUPABASE_ANON_KEY"]
+  # Configure secrets scanning to allow the Supabase anon key
+  # The anon key is designed to be public and used in browser code
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY"
