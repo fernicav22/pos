@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Bell, Settings, LogOut, ChevronDown } from 'lucide-react';
 
@@ -7,57 +7,85 @@ interface HeaderProps {
   onMenuClick?: () => void;
 }
 
-export default function Header({ children, onMenuClick }: HeaderProps) {
+export default function Header({ children }: HeaderProps) {
   const { user, signOut } = useAuthStore();
   const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside as any);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside as any);
+    };
+  }, [showDropdown]);
+
+  const handleSignOut = () => {
+    setShowDropdown(false);
+    signOut();
+  };
 
   return (
-    <header className="bg-white shadow-sm">
+    <header className="bg-white shadow-sm sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center">
+          <div className="flex items-center min-w-0">
             {children}
-            <h1 className="text-xl md:text-2xl font-semibold text-gray-900 ml-4">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-900 ml-2 sm:ml-4 truncate">
               Modern POS
             </h1>
           </div>
           
           <div className="flex items-center space-x-2 md:space-x-4">
-            <button className="p-2 text-gray-400 hover:text-gray-500 hidden md:block">
+            <button className="p-2 text-gray-400 hover:text-gray-500 active:text-gray-600 hidden md:block touch-manipulation">
               <Bell className="h-6 w-6" />
             </button>
-            <button className="p-2 text-gray-400 hover:text-gray-500 hidden md:block">
+            <button className="p-2 text-gray-400 hover:text-gray-500 active:text-gray-600 hidden md:block touch-manipulation">
               <Settings className="h-6 w-6" />
             </button>
             
             {/* Mobile dropdown */}
-            <div className="relative md:hidden">
+            <div className="relative md:hidden" ref={dropdownRef}>
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center space-x-1 p-2"
+                className="flex items-center space-x-1 p-2 touch-manipulation active:scale-95 transition-transform"
               >
-                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                  <span className="text-sm font-medium text-white">
                     {user?.firstName?.[0]}{user?.lastName?.[0]}
                   </span>
                 </div>
-                <ChevronDown className="h-4 w-4 text-gray-500" />
+                <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
               </button>
 
               {showDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                  <div className="px-4 py-2 text-sm text-gray-700">
-                    <div className="font-medium">{user?.firstName} {user?.lastName}</div>
-                    <div className="text-gray-500 capitalize">{user?.role}</div>
+                <>
+                  <div className="fixed inset-0 z-40 md:hidden" onClick={() => setShowDropdown(false)} />
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 z-50 border border-gray-200">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <div className="font-medium text-gray-900">{user?.firstName} {user?.lastName}</div>
+                      <div className="text-sm text-gray-500 capitalize">{user?.role}</div>
+                    </div>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 touch-manipulation"
+                    >
+                      <LogOut className="h-4 w-4 mr-3" />
+                      Sign out
+                    </button>
                   </div>
-                  <div className="border-t border-gray-100"></div>
-                  <button
-                    onClick={() => signOut()}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Sign out
-                  </button>
-                </div>
+                </>
               )}
             </div>
             
@@ -73,8 +101,8 @@ export default function Header({ children, onMenuClick }: HeaderProps) {
               </div>
               
               <button
-                onClick={() => signOut()}
-                className="p-2 text-gray-400 hover:text-gray-500"
+                onClick={handleSignOut}
+                className="p-2 text-gray-400 hover:text-gray-500 active:text-gray-600 transition-colors"
               >
                 <LogOut className="h-6 w-6" />
               </button>

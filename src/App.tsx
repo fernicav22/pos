@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import POS from './pages/POS';
@@ -35,14 +36,46 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
-          <Route path="pos" element={<POS />} />
-          <Route path="products" element={<Products />} />
-          <Route path="customers" element={<Customers />} />
-          <Route path="purchases" element={<Purchases />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="transactions" element={<Transactions />}/>
-          <Route path="staff" element={<Staff />} />
-          <Route path="settings" element={<Settings />} />
+          <Route path="pos" element={
+            <ProtectedRoute permission="canAccessPOS">
+              <POS />
+            </ProtectedRoute>
+          } />
+          <Route path="products" element={
+            <ProtectedRoute permission="canAccessProducts">
+              <Products />
+            </ProtectedRoute>
+          } />
+          <Route path="customers" element={
+            <ProtectedRoute permission="canAccessCustomers">
+              <Customers />
+            </ProtectedRoute>
+          } />
+          <Route path="purchases" element={
+            <ProtectedRoute permission="canAccessPurchases">
+              <Purchases />
+            </ProtectedRoute>
+          } />
+          <Route path="reports" element={
+            <ProtectedRoute permission="canAccessReports">
+              <Reports />
+            </ProtectedRoute>
+          } />
+          <Route path="transactions" element={
+            <ProtectedRoute permission="canAccessTransactions">
+              <Transactions />
+            </ProtectedRoute>
+          } />
+          <Route path="staff" element={
+            <ProtectedRoute permission="canAccessStaff">
+              <Staff />
+            </ProtectedRoute>
+          } />
+          <Route path="settings" element={
+            <ProtectedRoute permission="canAccessSettings">
+              <Settings />
+            </ProtectedRoute>
+          } />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
