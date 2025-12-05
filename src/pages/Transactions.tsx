@@ -264,19 +264,36 @@ function Transactions() {
     if (!receiptRef.current) return;
 
     try {
-      const canvas = await html2canvas(receiptRef.current);
+      // Detect if we're on mobile
+      const isMobile = window.innerWidth < 768;
+      
+      // Configure html2canvas with better settings for mobile
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: isMobile ? 2 : 3, // Higher scale for better quality, but lower on mobile to prevent memory issues
+        useCORS: true,
+        logging: false,
+        windowWidth: isMobile ? receiptRef.current.scrollWidth : undefined,
+        windowHeight: isMobile ? receiptRef.current.scrollHeight : undefined
+      });
+      
       const imgData = canvas.toDataURL('image/png');
+      
+      // Adjust PDF format based on device
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a4'
+        format: isMobile ? [80, 297] : 'a4', // Use thermal receipt width for mobile, A4 for desktop
+        compress: true
       });
 
       const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Add padding for mobile
+      const padding = isMobile ? 2 : 0;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'PNG', padding, padding, pdfWidth - (padding * 2), pdfHeight);
       return pdf;
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -527,13 +544,13 @@ function Transactions() {
       </div>
 
       {selectedTransaction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-8">
-              <div className="flex justify-between items-start mb-8">
-                <div className="flex items-center space-x-3">
-                  <Receipt className="h-6 w-6 text-gray-400" />
-                  <h2 className="text-xl font-semibold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-4xl w-full my-4 sm:my-8 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 md:p-8">
+              <div className="flex justify-between items-start mb-4 sm:mb-6 md:mb-8">
+                <div className="flex items-center space-x-2 sm:space-x-3">
+                  <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-gray-400" />
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
                     Transaction Details
                   </h2>
                 </div>
@@ -541,44 +558,44 @@ function Transactions() {
                   onClick={() => setSelectedTransaction(null)}
                   className="text-gray-400 hover:text-gray-500 transition-colors"
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
 
-              <div ref={receiptRef} className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-6">
+              <div ref={receiptRef} className="space-y-4 sm:space-y-6 md:space-y-8 bg-white">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
+                  <div className="space-y-4 sm:space-y-6">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500 mb-2">Transaction Info</h3>
-                      <div className="space-y-3">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Transaction Info</h3>
+                      <div className="space-y-2 sm:space-y-3">
                         <div>
-                          <span className="text-sm text-gray-500">Transaction ID</span>
-                          <p className="text-sm font-medium text-gray-900">#{selectedTransaction.id}</p>
+                          <span className="text-xs sm:text-sm text-gray-500">Transaction ID</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900 break-all">#{selectedTransaction.id}</p>
                         </div>
                         <div>
-                          <span className="text-sm text-gray-500">Date</span>
-                          <p className="text-sm font-medium text-gray-900">
+                          <span className="text-xs sm:text-sm text-gray-500">Date</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900">
                             {formatDate(selectedTransaction.created_at)}
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500 mb-2">Customer & Staff</h3>
-                      <div className="space-y-3">
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Customer & Staff</h3>
+                      <div className="space-y-2 sm:space-y-3">
                         <div>
-                          <span className="text-sm text-gray-500">Customer</span>
-                          <p className="text-sm font-medium text-gray-900">
+                          <span className="text-xs sm:text-sm text-gray-500">Customer</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900">
                             {selectedTransaction.customer
                               ? `${selectedTransaction.customer.first_name} ${selectedTransaction.customer.last_name}`
                               : 'Walk-in Customer'}
                           </p>
                         </div>
                         <div>
-                          <span className="text-sm text-gray-500">Cashier</span>
-                          <p className="text-sm font-medium text-gray-900">
+                          <span className="text-xs sm:text-sm text-gray-500">Cashier</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900">
                             {selectedTransaction.user
                               ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}`
                               : 'Unknown User'}
@@ -589,25 +606,71 @@ function Transactions() {
                   </div>
                 </div>
 
-                <div className="border-t border-gray-200 pt-8">
-                  <h3 className="text-sm font-medium text-gray-500 mb-4">Items</h3>
-                  <div className="overflow-x-auto">
+                <div className="border-t border-gray-200 pt-4 sm:pt-6 md:pt-8">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-3 sm:mb-4">Items</h3>
+                  
+                  {/* Mobile-friendly card layout for small screens */}
+                  <div className="block sm:hidden space-y-3">
+                    {selectedTransaction.items.map((item) => (
+                      <div key={item.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                            <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-gray-500">Qty:</span>
+                            <p className="font-medium text-gray-900">{item.quantity}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Price:</span>
+                            <p className="font-medium text-gray-900">{formatCurrency(item.price)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Total:</span>
+                            <p className="font-medium text-gray-900">{formatCurrency(item.subtotal)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Mobile totals */}
+                    <div className="border-t border-gray-200 pt-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Subtotal</span>
+                        <span className="text-gray-900">{formatCurrency(selectedTransaction.subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Tax</span>
+                        <span className="text-gray-900">{formatCurrency(selectedTransaction.tax)}</span>
+                      </div>
+                      <div className="flex justify-between text-base font-medium border-t border-gray-200 pt-2">
+                        <span className="text-gray-900">Total</span>
+                        <span className="text-gray-900">{formatCurrency(selectedTransaction.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Desktop table layout */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Product
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             SKU
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Quantity
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Price
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Subtotal
                           </th>
                         </tr>
@@ -615,19 +678,19 @@ function Transactions() {
                       <tbody className="divide-y divide-gray-200">
                         {selectedTransaction.items.map((item) => (
                           <tr key={item.id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900">
                               {item.product.name}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500">
                               {item.product.sku}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
                               {item.quantity}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
                               {formatCurrency(item.price)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
                               {formatCurrency(item.subtotal)}
                             </td>
                           </tr>
@@ -635,26 +698,26 @@ function Transactions() {
                       </tbody>
                       <tfoot>
                         <tr>
-                          <td colSpan={4} className="px-6 py-4 text-sm text-gray-500 text-right">
+                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
                             Subtotal
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
                             {formatCurrency(selectedTransaction.subtotal)}
                           </td>
                         </tr>
                         <tr>
-                          <td colSpan={4} className="px-6 py-4 text-sm text-gray-500 text-right">
+                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
                             Tax
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
                             {formatCurrency(selectedTransaction.tax)}
                           </td>
                         </tr>
                         <tr className="border-t border-gray-200">
-                          <td colSpan={4} className="px-6 py-4 text-sm font-medium text-gray-900 text-right">
+                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-gray-900 text-right">
                             Total
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-gray-900 text-right">
                             {formatCurrency(selectedTransaction.total)}
                           </td>
                         </tr>
@@ -664,11 +727,11 @@ function Transactions() {
                 </div>
               </div>
 
-              <div className="mt-8 flex justify-end space-x-4">
+              <div className="mt-4 sm:mt-6 md:mt-8 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
                 {selectedTransaction.customer?.email && (
                   <button
                     onClick={handleEmailReceipt}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                   >
                     <Mail className="h-4 w-4 mr-2" />
                     Email Receipt
@@ -676,7 +739,7 @@ function Transactions() {
                 )}
                 <button
                   onClick={handlePrintReceipt}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                 >
                   <Printer className="h-4 w-4 mr-2" />
                   Print Receipt
@@ -690,5 +753,4 @@ function Transactions() {
   );
 }
 
-const _default = Transactions;
-export default _default;
+export default Transactions;

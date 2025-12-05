@@ -491,8 +491,8 @@ export default function POS() {
 
         {/* Mobile Cart/Payment Modal */}
         {showPayment && (
-          <div className="fixed inset-0 bg-white z-50 flex flex-col">
-            <div className="sticky top-0 bg-white border-b shadow-sm z-10">
+          <div className="fixed inset-0 bg-white z-50 flex flex-col max-h-screen">
+            <div className="flex-shrink-0 bg-white border-b shadow-sm z-10">
               <div className="p-4 flex items-center">
                 <button
                   onClick={() => setShowPayment(false)}
@@ -506,11 +506,11 @@ export default function POS() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 min-h-0">
               {!paymentMethod ? (
                 <>
                   {/* Cart items */}
-                  <div className="space-y-3 mb-6">
+                  <div className="space-y-3 mb-6 pb-2">
                     {cart.map((item) => (
                       <div key={item.id} className="bg-white border rounded-xl p-4">
                         <div className="flex justify-between items-start mb-3">
@@ -549,7 +549,7 @@ export default function POS() {
                   </div>
 
                   {/* Shipping cost */}
-                  <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+                  <div className="mb-6 p-4 bg-gray-50 rounded-xl flex-shrink-0">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Shipping Cost (Optional)
                     </label>
@@ -568,7 +568,7 @@ export default function POS() {
                   </div>
 
                   {/* Summary */}
-                  <div className="bg-gray-50 p-4 rounded-xl space-y-2 mb-4">
+                  <div className="bg-gray-50 p-4 rounded-xl space-y-2 mb-4 flex-shrink-0">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal</span>
                       <span className="font-semibold">{formatCurrency(subtotal)}</span>
@@ -647,7 +647,7 @@ export default function POS() {
             </div>
 
             {/* Action buttons */}
-            <div className="sticky bottom-0 bg-white border-t p-4 space-y-3">
+            <div className="flex-shrink-0 bg-white border-t p-4 space-y-3 safe-area-bottom">
               {!paymentMethod ? (
                 <>
                   <button
