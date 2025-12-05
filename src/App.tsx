@@ -18,14 +18,14 @@ import { useSettingsStore } from './store/settingsStore';
 
 function App() {
   const { loading: authLoading } = useAuthStore();
-  const { loadSettings } = useSettingsStore();
+  const { loadSettings, isInitialized } = useSettingsStore();
 
   // Load settings from database on app initialization
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  if (authLoading) {
+  if (authLoading || !isInitialized) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">

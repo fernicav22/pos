@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 
 interface SettingsState {
   settings: typeof defaultSettings;
+  isLoading: boolean;
+  isInitialized: boolean;
   formatCurrency: (amount: number) => string;
   calculateTax: (amount: number) => number;
   updateSettings: (newSettings: typeof defaultSettings) => Promise<void>;
@@ -15,6 +17,8 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       settings: defaultSettings,
+      isLoading: false,
+      isInitialized: false,
 
       formatCurrency: (amount: number) => {
         const { symbol, position } = get().settings.currency;
@@ -36,6 +40,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       loadSettings: async () => {
         try {
+          set({ isLoading: true });
           const { data, error } = await supabase
             .from('store_settings')
             .select('*')
@@ -75,11 +80,14 @@ export const useSettingsStore = create<SettingsState>()(
                 showItemizedList: data.show_itemized_list !== false
               }
             };
-            set({ settings: loadedSettings });
+            set({ settings: loadedSettings, isLoading: false, isInitialized: true });
+          } else {
+            set({ isLoading: false, isInitialized: true });
           }
         } catch (error) {
           console.error('Error loading settings:', error);
           // Keep default settings if loading fails
+          set({ isLoading: false, isInitialized: true });
         }
       },
 
