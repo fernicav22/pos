@@ -293,6 +293,31 @@ export default function POS() {
                   </option>
                 ))}
               </select>
+              {/* Customer section on product page */}
+              {selectedCustomer ? (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-blue-900 text-sm truncate">
+                      {selectedCustomer.first_name} {selectedCustomer.last_name}
+                    </p>
+                    <p className="text-xs text-blue-700 truncate">{selectedCustomer.email}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCustomer(null)}
+                    className="ml-2 p-2 hover:bg-blue-100 rounded-lg transition-colors touch-manipulation flex-shrink-0"
+                  >
+                    <X className="h-5 w-5 text-blue-600" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowCustomerSearch(true)}
+                  className="w-full p-3 border-2 border-dashed border-gray-300 rounded-xl text-blue-600 font-medium flex items-center justify-center touch-manipulation active:scale-98 transition-transform"
+                >
+                  <UserPlus className="h-5 w-5 mr-2" />
+                  Add Customer (Optional)
+                </button>
+              )}
             </div>
           </div>
 
@@ -355,45 +380,17 @@ export default function POS() {
         {showPayment && (
           <div className="fixed inset-0 bg-white z-50 flex flex-col">
             <div className="sticky top-0 bg-white border-b shadow-sm">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center">
-                  <button
-                    onClick={() => setShowPayment(false)}
-                    className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors touch-manipulation"
-                  >
-                    <ArrowLeft className="h-6 w-6" />
-                  </button>
-                  <h2 className="text-lg font-semibold">
-                    {paymentMethod ? 'Payment' : 'Your Cart'}
-                  </h2>
-                </div>
-                {!selectedCustomer && (
-                  <button
-                    onClick={() => setShowCustomerSearch(true)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors touch-manipulation"
-                    title="Add Customer"
-                  >
-                    <UserPlus className="h-6 w-6" />
-                  </button>
-                )}
+              <div className="p-4 flex items-center">
+                <button
+                  onClick={() => setShowPayment(false)}
+                  className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                >
+                  <ArrowLeft className="h-6 w-6" />
+                </button>
+                <h2 className="text-lg font-semibold">
+                  {paymentMethod ? 'Payment' : 'Your Cart'}
+                </h2>
               </div>
-              {/* Show selected customer in header */}
-              {selectedCustomer && (
-                <div className="px-4 pb-3 flex items-center justify-between bg-blue-50 border-t border-blue-200">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-blue-900 text-sm truncate">
-                      {selectedCustomer.first_name} {selectedCustomer.last_name}
-                    </p>
-                    <p className="text-xs text-blue-700 truncate">{selectedCustomer.email}</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedCustomer(null)}
-                    className="ml-2 p-2 hover:bg-blue-100 rounded-lg transition-colors touch-manipulation flex-shrink-0"
-                  >
-                    <X className="h-5 w-5 text-blue-600" />
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
