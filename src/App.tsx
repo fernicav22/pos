@@ -17,15 +17,29 @@ import { useAuthStore } from './store/authStore';
 import { useSettingsStore } from './store/settingsStore';
 
 function App() {
-  const { loading: authLoading } = useAuthStore();
+  const { loading: authLoading, user } = useAuthStore();
   const { loadSettings, isInitialized } = useSettingsStore();
 
-  // Load settings from database on app initialization
+  // Load settings from database after user is authenticated
   useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+    if (user) {
+      loadSettings();
+    }
+  }, [user, loadSettings]);
 
-  if (authLoading || !isInitialized) {
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is logged in, wait for settings to initialize
+  if (user && !isInitialized) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">

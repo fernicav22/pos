@@ -41,47 +41,60 @@ export const useSettingsStore = create<SettingsState>()(
       loadSettings: async () => {
         try {
           set({ isLoading: true });
+          console.log('Loading settings from database...');
+          
+          // Try to get settings - use limit(1) and get first item instead of single()
           const { data, error } = await supabase
             .from('store_settings')
             .select('*')
-            .limit(1)
-            .single();
+            .limit(1);
 
-          if (error) throw error;
+          if (error) {
+            console.error('Error fetching settings:', error);
+            throw error;
+          }
 
-          if (data) {
+          console.log('Raw data from database:', data);
+          
+          // Get the first record if it exists
+          const settingsRecord = data && data.length > 0 ? data[0] : null;
+
+          if (settingsRecord) {
             // Map database fields to settings structure
             const loadedSettings = {
               store: {
-                name: data.store_name,
-                address: data.store_address,
-                phone: data.store_phone || '',
-                email: data.store_email || '',
-                website: data.store_website || ''
+                name: settingsRecord.store_name,
+                address: settingsRecord.store_address,
+                phone: settingsRecord.store_phone || '',
+                email: settingsRecord.store_email || '',
+                website: settingsRecord.store_website || ''
               },
               tax: {
-                rate: Number(data.tax_rate),
-                inclusive: data.tax_inclusive || false
+                rate: Number(settingsRecord.tax_rate),
+                inclusive: settingsRecord.tax_inclusive || false
               },
               currency: {
-                code: data.currency,
-                symbol: data.currency === 'USD' ? '$' : data.currency,
+                code: settingsRecord.currency,
+                symbol: settingsRecord.currency === 'USD' ? '$' : settingsRecord.currency,
                 position: 'before' as const
               },
               inventory: {
-                lowStockThreshold: data.low_stock_threshold || 5,
+                lowStockThreshold: settingsRecord.low_stock_threshold || 5,
                 outOfStockThreshold: 0,
-                enableStockTracking: data.enable_stock_tracking !== false
+                enableStockTracking: settingsRecord.enable_stock_tracking !== false
               },
               receipt: {
-                header: data.receipt_header || '',
-                footer: data.receipt_footer || '',
-                showTaxDetails: data.show_tax_details !== false,
-                showItemizedList: data.show_itemized_list !== false
+                header: settingsRecord.receipt_header || '',
+                footer: settingsRecord.receipt_footer || '',
+                showTaxDetails: settingsRecord.show_tax_details !== false,
+                showItemizedList: settingsRecord.show_itemized_list !== false
               }
             };
+            console.log('Loaded settings:', loadedSettings);
+            console.log('Tax rate from DB:', settingsRecord.tax_rate, '-> Converted to:', loadedSettings.tax.rate);
             set({ settings: loadedSettings, isLoading: false, isInitialized: true });
           } else {
+            console.log('No settings found in database, using defaults');
             set({ isLoading: false, isInitialized: true });
           }
         } catch (error) {
