@@ -2,9 +2,24 @@ import { useState, useEffect } from 'react';
 import { Search, CreditCard, Banknote, UserPlus, Split, ArrowLeft, Package, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { Product } from '../types';
 import { checkStock } from '../utils/inventory';
 import { useSettingsStore } from '../store/settingsStore';
+
+interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  barcode?: string;
+  price: number;
+  cost: number;
+  category_id?: string;
+  description?: string;
+  stock_quantity: number;
+  low_stock_alert: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 interface CartItem extends Product {
   quantity: number;
@@ -84,7 +99,7 @@ export default function POS() {
     const existingItem = cart.find(item => item.id === product.id);
     
     if (existingItem) {
-      if (existingItem.quantity >= product.stockQuantity) {
+      if (existingItem.quantity >= product.stock_quantity) {
         toast.error('Maximum stock quantity reached');
         return;
       }
@@ -102,7 +117,7 @@ export default function POS() {
     const product = products.find(p => p.id === id);
     if (!product) return;
 
-    if (newQuantity > product.stockQuantity) {
+    if (newQuantity > product.stock_quantity) {
       toast.error('Quantity cannot exceed available stock');
       return;
     }
@@ -256,7 +271,7 @@ export default function POS() {
                   key={product.id}
                   onClick={() => handleAddToCart(product)}
                   className="p-3 border-2 rounded-xl active:scale-95 transition-all text-left touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={product.stockQuantity === 0}
+                  disabled={product.stock_quantity === 0}
                 >
                   <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-2 flex items-center justify-center">
                     <Package className="h-10 w-10 text-gray-400" />
@@ -265,7 +280,7 @@ export default function POS() {
                   <p className="text-xs text-gray-600 font-medium mt-1">
                     {formatCurrency(product.price)}
                   </p>
-                  <p className="text-xs text-gray-500">Stock: {product.stockQuantity}</p>
+                  <p className="text-xs text-gray-500">Stock: {product.stock_quantity}</p>
                 </button>
               ))
             ) : (
@@ -370,7 +385,7 @@ export default function POS() {
                             <button
                               onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
                               className="px-4 py-2 text-lg font-semibold hover:bg-gray-100 touch-manipulation"
-                              disabled={item.quantity >= item.stockQuantity}
+                              disabled={item.quantity >= item.stock_quantity}
                             >
                               +
                             </button>
@@ -570,14 +585,14 @@ export default function POS() {
                   key={product.id}
                   onClick={() => handleAddToCart(product)}
                   className="p-4 border rounded-lg hover:shadow-md transition-shadow text-left"
-                  disabled={product.stockQuantity === 0}
+                  disabled={product.stock_quantity === 0}
                 >
                   <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center text-gray-400">
                     <Package className="h-8 w-8" />
                   </div>
                   <h3 className="font-medium truncate">{product.name}</h3>
                   <p className="text-sm text-gray-600">
-                    {formatCurrency(product.price)} - Stock: {product.stockQuantity}
+                    {formatCurrency(product.price)} - Stock: {product.stock_quantity}
                   </p>
                 </button>
               ))
@@ -726,7 +741,7 @@ export default function POS() {
                       <input
                         type="number"
                         min="1"
-                        max={item.stockQuantity}
+                        max={item.stock_quantity}
                         value={item.quantity}
                         onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value))}
                         className="w-16 px-2 py-1 border rounded-lg mr-2"
