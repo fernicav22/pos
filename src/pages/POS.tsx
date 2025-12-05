@@ -539,7 +539,7 @@ export default function POS() {
               {!paymentMethod ? (
                 <>
                   <button
-                    onClick={() => setPaymentMethod('')}
+                    onClick={() => setPaymentMethod('selecting')}
                     disabled={cart.length === 0}
                     className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-98 transition-transform shadow-lg"
                   >
