@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import Purchases from './pages/Purchases';
 import { useAuthStore } from './store/authStore';
 import { useSettingsStore } from './store/settingsStore';
+import { setupPeriodicCleanup } from './utils/memoryOptimization';
 
 function App() {
   const { loading: authLoading, user } = useAuthStore();
@@ -26,6 +27,16 @@ function App() {
       loadSettings();
     }
   }, [user, loadSettings]);
+
+  // Set up periodic memory cleanup
+  useEffect(() => {
+    // Run cleanup every 5 minutes
+    const cleanup = setupPeriodicCleanup(300000);
+    
+    return () => {
+      cleanup();
+    };
+  }, []);
 
   if (authLoading) {
     return (

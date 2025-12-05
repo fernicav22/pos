@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Search, Filter, BarChart2, Download, Upload, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
@@ -47,36 +47,63 @@ export default function Products() {
     category: 'Electronics',
     description: ''
   });
+  
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchProducts();
+    
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
+      // Create new abort controller for this request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(200) // Add pagination limit
+        .abortSignal(abortControllerRef.current.signal);
 
       if (error) {
         throw error;
       }
 
-      if (data) {
+      if (data && isMountedRef.current) {
         const formattedProducts = data.map(product => ({
           ...product,
           status: getProductStatus(product.stock_quantity, product.low_stock_alert)
         }));
         setProducts(formattedProducts);
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching products:', error);
-      toast.error('Failed to load products');
+      if (isMountedRef.current) {
+        toast.error('Failed to load products');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
   const getProductStatus = (stockQuantity: number, lowStockAlert: number): Product['status'] => {
     if (stockQuantity === 0) return 'out-of-stock';

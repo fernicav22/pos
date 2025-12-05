@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Search, CreditCard, Banknote, UserPlus, Split, ArrowLeft, Package, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { checkStock } from '../utils/inventory';
 import { useSettingsStore } from '../store/settingsStore';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface Product {
   id: string;
@@ -38,48 +39,83 @@ export default function POS() {
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
   const [shippingCost, setShippingCost] = useState(0);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  
+  // Use refs to track mounted state and abort controller
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Debounce search query to prevent excessive filtering
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Memoize filtered products to prevent unnecessary recalculations
+  const filteredProducts = useMemo(() => {
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase();
+      return products.filter(product => 
+        product.name.toLowerCase().includes(query) ||
+        product.sku.toLowerCase().includes(query)
+      );
+    }
+    return products;
+  }, [debouncedSearchQuery, products]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchProducts();
     fetchCategories();
+    
+    return () => {
+      isMountedRef.current = false;
+      // Cancel any pending requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
 
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const filtered = products.filter(product => 
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [searchQuery, products]);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
-      setLoading(true);
+      // Create new abort controller for this request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
+      
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('active', true)
         .gt('stock_quantity', 0)
-        .order('name');
+        .order('name')
+        .abortSignal(abortControllerRef.current.signal);
 
       if (error) throw error;
 
-      setProducts(data || []);
-      setFilteredProducts(data || []);
-    } catch (error) {
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setProducts(data || []);
+      }
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching products:', error);
-      toast.error('Failed to load products');
+      if (isMountedRef.current) {
+        toast.error('Failed to load products');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('categories')
@@ -88,12 +124,16 @@ export default function POS() {
 
       if (error) throw error;
 
-      setCategories(data || []);
+      if (isMountedRef.current) {
+        setCategories(data || []);
+      }
     } catch (error) {
       console.error('Error fetching categories:', error);
-      toast.error('Failed to load categories');
+      if (isMountedRef.current) {
+        toast.error('Failed to load categories');
+      }
     }
-  };
+  }, []);
 
   const handleAddToCart = (product: Product) => {
     const existingItem = cart.find(item => item.id === product.id);

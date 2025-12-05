@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { BarChart3, DollarSign, Package, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -21,34 +21,56 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const { formatCurrency } = useSettingsStore();
+  
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    isMountedRef.current = true;
     fetchDashboardStats();
+    
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [timeRange]);
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = useCallback(async () => {
     try {
-      setLoading(true);
+      // Create new abort controller for this request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
 
       // Get total sales
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select('total')
-        .eq('payment_status', 'completed');
+        .eq('payment_status', 'completed')
+        .abortSignal(abortControllerRef.current.signal);
 
       if (salesError) throw salesError;
 
       // Get total products sold
       const { data: saleItemsData, error: saleItemsError } = await supabase
         .from('sale_items')
-        .select('quantity');
+        .select('quantity')
+        .abortSignal(abortControllerRef.current.signal);
 
       if (saleItemsError) throw saleItemsError;
 
       // Get active customers count
       const { count: customersCount, error: customersError } = await supabase
         .from('customers')
-        .select('*', { count: 'exact' });
+        .select('*', { count: 'exact' })
+        .abortSignal(abortControllerRef.current.signal);
 
       if (customersError) throw customersError;
 
@@ -57,19 +79,29 @@ export default function Dashboard() {
       const productsSold = saleItemsData?.reduce((sum, item) => sum + item.quantity, 0) || 0;
       const averageSale = salesData?.length ? totalSales / salesData.length : 0;
 
-      setStats({
-        totalSales,
-        productsSold,
-        activeCustomers: customersCount || 0,
-        averageSale
-      });
-    } catch (error) {
+      if (isMountedRef.current) {
+        setStats({
+          totalSales,
+          productsSold,
+          activeCustomers: customersCount || 0,
+          averageSale
+        });
+      }
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching dashboard stats:', error);
-      toast.error('Failed to load dashboard data');
+      if (isMountedRef.current) {
+        toast.error('Failed to load dashboard data');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [timeRange]);
 
   const statCards = [
     { 

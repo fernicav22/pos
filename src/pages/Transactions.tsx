@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { useSettingsStore } from '../store/settingsStore';
@@ -54,7 +54,6 @@ interface SearchFilters {
 function Transactions() {
   const { formatCurrency } = useSettingsStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('all');
@@ -69,16 +68,11 @@ function Transactions() {
     status: ''
   });
   const receiptRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [status, startDate]);
-
-  useEffect(() => {
-    filterTransactions();
-  }, [transactions, searchFilters]);
-
-  const filterTransactions = () => {
+  // Memoize filtered transactions to prevent unnecessary recalculations
+  const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
 
     if (searchFilters.id) {
@@ -133,8 +127,20 @@ function Transactions() {
       );
     }
 
-    setFilteredTransactions(filtered);
-  };
+    return filtered;
+  }, [transactions, searchFilters]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    fetchTransactions();
+    
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [status, startDate]);
 
   const handleSearchChange = (field: keyof SearchFilters, value: string) => {
     setSearchFilters(prev => ({
@@ -143,9 +149,18 @@ function Transactions() {
     }));
   };
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
-      setLoading(true);
+      // Create new abort controller for this request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
+      
       let query = supabase
         .from('sales')
         .select(`
@@ -153,7 +168,9 @@ function Transactions() {
           user:users(first_name, last_name),
           customer:customers(first_name, last_name)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100) // Add pagination limit
+        .abortSignal(abortControllerRef.current.signal);
 
       if (status !== 'all') {
         query = query.eq('payment_status', status);
@@ -167,15 +184,24 @@ function Transactions() {
 
       if (error) throw error;
 
-      setTransactions(data || []);
-      setFilteredTransactions(data || []);
-    } catch (error) {
+      if (isMountedRef.current) {
+        setTransactions(data || []);
+      }
+    } catch (error: any) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching transactions:', error);
-      toast.error('Failed to load transactions');
+      if (isMountedRef.current) {
+        toast.error('Failed to load transactions');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [status, startDate]);
 
   const fetchTransactionDetails = async (transactionId: string) => {
     try {
