@@ -658,6 +658,12 @@ export default function POS() {
                     Continue to Payment
                   </button>
                   <button
+                    onClick={() => setShowPayment(false)}
+                    className="w-full border-2 border-blue-500 text-blue-600 py-4 rounded-xl font-semibold touch-manipulation active:scale-98 transition-transform"
+                  >
+                    Add More Items
+                  </button>
+                  <button
                     onClick={() => {
                       setCart([]);
                       setShippingCost(0);
