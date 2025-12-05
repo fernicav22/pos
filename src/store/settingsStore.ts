@@ -41,20 +41,13 @@ export const useSettingsStore = create<SettingsState>()(
       loadSettings: async () => {
         try {
           set({ isLoading: true });
-          console.log('Loading settings from database...');
           
-          // Try to get settings - use limit(1) and get first item instead of single()
           const { data, error } = await supabase
             .from('store_settings')
             .select('*')
             .limit(1);
 
-          if (error) {
-            console.error('Error fetching settings:', error);
-            throw error;
-          }
-
-          console.log('Raw data from database:', data);
+          if (error) throw error;
           
           // Get the first record if it exists
           const settingsRecord = data && data.length > 0 ? data[0] : null;
@@ -90,16 +83,12 @@ export const useSettingsStore = create<SettingsState>()(
                 showItemizedList: settingsRecord.show_itemized_list !== false
               }
             };
-            console.log('Loaded settings:', loadedSettings);
-            console.log('Tax rate from DB:', settingsRecord.tax_rate, '-> Converted to:', loadedSettings.tax.rate);
             set({ settings: loadedSettings, isLoading: false, isInitialized: true });
           } else {
-            console.log('No settings found in database, using defaults');
             set({ isLoading: false, isInitialized: true });
           }
         } catch (error) {
           console.error('Error loading settings:', error);
-          // Keep default settings if loading fails
           set({ isLoading: false, isInitialized: true });
         }
       },

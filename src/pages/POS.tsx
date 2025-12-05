@@ -40,12 +40,6 @@ export default function POS() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
 
-  // Debug: Log settings when component mounts or settings change
-  useEffect(() => {
-    console.log('POS Component - Current settings:', settings);
-    console.log('POS Component - Tax rate:', settings.tax.rate);
-  }, [settings]);
-
   useEffect(() => {
     fetchProducts();
     fetchCategories();
