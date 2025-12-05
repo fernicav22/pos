@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
@@ -14,9 +14,16 @@ import Staff from './pages/Staff';
 import Settings from './pages/Settings';
 import Purchases from './pages/Purchases';
 import { useAuthStore } from './store/authStore';
+import { useSettingsStore } from './store/settingsStore';
 
 function App() {
   const { loading: authLoading } = useAuthStore();
+  const { loadSettings } = useSettingsStore();
+
+  // Load settings from database on app initialization
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   if (authLoading) {
     return (
