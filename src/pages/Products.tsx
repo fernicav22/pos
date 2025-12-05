@@ -171,7 +171,7 @@ export default function Products() {
     }
     
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('products')
         .insert([{
           name: formData.name,

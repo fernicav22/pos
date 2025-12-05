@@ -289,6 +289,10 @@ function Transactions() {
 
     try {
       const pdf = await generatePDF();
+      if (!pdf) {
+        throw new Error('Failed to generate PDF');
+      }
+      
       const pdfBlob = pdf.output('blob');
       
       const formData = new FormData();
@@ -308,6 +312,10 @@ function Transactions() {
 
     try {
       const pdf = await generatePDF();
+      if (!pdf) {
+        throw new Error('Failed to generate PDF');
+      }
+      
       pdf.autoPrint();
       window.open(pdf.output('bloburl'), '_blank');
     } catch (error) {
