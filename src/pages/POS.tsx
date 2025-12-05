@@ -354,49 +354,51 @@ export default function POS() {
         {/* Mobile Cart/Payment Modal */}
         {showPayment && (
           <div className="fixed inset-0 bg-white z-50 flex flex-col">
-            <div className="sticky top-0 bg-white border-b p-4 flex items-center shadow-sm">
-              <button
-                onClick={() => setShowPayment(false)}
-                className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors touch-manipulation"
-              >
-                <ArrowLeft className="h-6 w-6" />
-              </button>
-              <h2 className="text-lg font-semibold">
-                {paymentMethod ? 'Payment' : 'Your Cart'}
-              </h2>
+            <div className="sticky top-0 bg-white border-b shadow-sm">
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setShowPayment(false)}
+                    className="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                  >
+                    <ArrowLeft className="h-6 w-6" />
+                  </button>
+                  <h2 className="text-lg font-semibold">
+                    {paymentMethod ? 'Payment' : 'Your Cart'}
+                  </h2>
+                </div>
+                {!selectedCustomer && (
+                  <button
+                    onClick={() => setShowCustomerSearch(true)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors touch-manipulation"
+                    title="Add Customer"
+                  >
+                    <UserPlus className="h-6 w-6" />
+                  </button>
+                )}
+              </div>
+              {/* Show selected customer in header */}
+              {selectedCustomer && (
+                <div className="px-4 pb-3 flex items-center justify-between bg-blue-50 border-t border-blue-200">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-blue-900 text-sm truncate">
+                      {selectedCustomer.first_name} {selectedCustomer.last_name}
+                    </p>
+                    <p className="text-xs text-blue-700 truncate">{selectedCustomer.email}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCustomer(null)}
+                    className="ml-2 p-2 hover:bg-blue-100 rounded-lg transition-colors touch-manipulation flex-shrink-0"
+                  >
+                    <X className="h-5 w-5 text-blue-600" />
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
               {!paymentMethod ? (
                 <>
-                  {/* Customer section */}
-                  {selectedCustomer ? (
-                    <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-blue-900">
-                            {selectedCustomer.first_name} {selectedCustomer.last_name}
-                          </p>
-                          <p className="text-sm text-blue-700">{selectedCustomer.email}</p>
-                        </div>
-                        <button
-                          onClick={() => setSelectedCustomer(null)}
-                          className="p-2 hover:bg-blue-100 rounded-lg transition-colors touch-manipulation"
-                        >
-                          <X className="h-5 w-5 text-blue-600" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowCustomerSearch(true)}
-                      className="w-full mb-4 p-4 border-2 border-dashed border-gray-300 rounded-xl text-blue-600 font-medium flex items-center justify-center touch-manipulation active:scale-98 transition-transform"
-                    >
-                      <UserPlus className="h-5 w-5 mr-2" />
-                      Add Customer (Optional)
-                    </button>
-                  )}
-
                   {/* Cart items */}
                   <div className="space-y-3 mb-6">
                     {cart.map((item) => (
