@@ -93,11 +93,11 @@ export default function Sidebar({ onClose }: SidebarProps) {
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center text-gray-300 text-sm">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-medium text-xs">
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
+            {user?.firstName?.[0] || 'U'}{user?.lastName?.[0] || ''}
           </div>
           <div className="ml-3 min-w-0 flex-1">
-            <p className="font-medium text-white truncate">{user?.firstName} {user?.lastName}</p>
-            <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
+            <p className="font-medium text-white truncate">{user?.firstName || ''} {user?.lastName || ''}</p>
+            <p className="text-xs text-gray-400 capitalize">{user?.role || ''}</p>
           </div>
         </div>
       </div>

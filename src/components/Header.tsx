@@ -63,7 +63,7 @@ export default function Header({ children }: HeaderProps) {
               >
                 <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                   <span className="text-sm font-medium text-white">
-                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                    {user?.firstName?.[0] || 'U'}{user?.lastName?.[0] || ''}
                   </span>
                 </div>
                 <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
@@ -74,8 +74,8 @@ export default function Header({ children }: HeaderProps) {
                   <div className="fixed inset-0 z-40 md:hidden" onClick={() => setShowDropdown(false)} />
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 z-50 border border-gray-200">
                     <div className="px-4 py-3 border-b border-gray-100">
-                      <div className="font-medium text-gray-900">{user?.firstName} {user?.lastName}</div>
-                      <div className="text-sm text-gray-500 capitalize">{user?.role}</div>
+                      <div className="font-medium text-gray-900">{user?.firstName || ''} {user?.lastName || ''}</div>
+                      <div className="text-sm text-gray-500 capitalize">{user?.role || ''}</div>
                     </div>
                     <button
                       onClick={handleSignOut}
@@ -93,10 +93,10 @@ export default function Header({ children }: HeaderProps) {
             <div className="hidden md:flex items-center space-x-3">
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-gray-900">
-                  {user?.firstName} {user?.lastName}
+                  {user?.firstName || ''} {user?.lastName || ''}
                 </span>
                 <span className="text-xs text-gray-500 capitalize">
-                  {user?.role}
+                  {user?.role || ''}
                 </span>
               </div>
               

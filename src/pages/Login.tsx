@@ -26,6 +26,10 @@ export default function Login() {
     try {
       await signIn(email, password);
       console.log('Login successful');
+      
+      // Wait a bit for the auth state to propagate
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       navigate('/', { replace: true });
     } catch (error: any) {
       console.error('Login error:', error);

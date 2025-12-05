@@ -18,7 +18,7 @@ interface Transaction {
   user: {
     first_name: string;
     last_name: string;
-  };
+  } | null;
   customer?: {
     first_name: string;
     last_name: string;
@@ -107,9 +107,11 @@ function Transactions() {
 
     if (searchFilters.cashier) {
       filtered = filtered.filter(t => 
-        `${t.user.first_name} ${t.user.last_name}`
-          .toLowerCase()
-          .includes(searchFilters.cashier.toLowerCase())
+        t.user
+          ? `${t.user.first_name} ${t.user.last_name}`
+              .toLowerCase()
+              .includes(searchFilters.cashier.toLowerCase())
+          : false
       );
     }
 
@@ -449,7 +451,9 @@ function Transactions() {
                         : 'Walk-in Customer'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {`${transaction.user.first_name} ${transaction.user.last_name}`}
+                      {transaction.user
+                        ? `${transaction.user.first_name} ${transaction.user.last_name}`
+                        : 'Unknown User'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatCurrency(transaction.total)}
@@ -541,7 +545,9 @@ function Transactions() {
                         <div>
                           <span className="text-sm text-gray-500">Cashier</span>
                           <p className="text-sm font-medium text-gray-900">
-                            {`${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}`}
+                            {selectedTransaction.user
+                              ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}`
+                              : 'Unknown User'}
                           </p>
                         </div>
                       </div>
