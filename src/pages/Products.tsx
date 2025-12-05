@@ -155,7 +155,8 @@ export default function Products() {
           cost: formData.cost,
           stock_quantity: formData.stockQuantity,
           category_id: null,
-          low_stock_alert: 5
+          low_stock_alert: 5,
+          active: true
         }])
         .select()
         .single();
