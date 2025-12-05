@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
@@ -20,13 +20,47 @@ import { setupPeriodicCleanup } from './utils/memoryOptimization';
 function App() {
   const { loading: authLoading, user } = useAuthStore();
   const { loadSettings, isInitialized } = useSettingsStore();
+  const [settingsTimeout, setSettingsTimeout] = useState(false);
+  const settingsLoadedRef = useRef(false);
 
   // Load settings from database after user is authenticated
-  useEffect(() => {
-    if (user) {
-      loadSettings();
+  // Memoized to prevent unnecessary re-renders
+  const loadSettingsMemo = useCallback(async () => {
+    if (!user || settingsLoadedRef.current) return;
+    
+    console.log('App: Loading settings for authenticated user');
+    settingsLoadedRef.current = true;
+    
+    try {
+      await loadSettings();
+    } catch (error) {
+      console.error('App: Error loading settings:', error);
+      // Continue anyway - app can work with default settings
+      setSettingsTimeout(true);
     }
   }, [user, loadSettings]);
+
+  useEffect(() => {
+    if (user && !isInitialized) {
+      loadSettingsMemo();
+      
+      // Timeout protection - if settings don't load in 5 seconds, proceed anyway
+      const timeout = setTimeout(() => {
+        if (!isInitialized) {
+          console.warn('App: Settings load timeout, proceeding with defaults');
+          setSettingsTimeout(true);
+        }
+      }, 5000);
+      
+      return () => clearTimeout(timeout);
+    }
+    
+    // Reset the ref when user logs out
+    if (!user) {
+      settingsLoadedRef.current = false;
+      setSettingsTimeout(false);
+    }
+  }, [user, isInitialized, loadSettingsMemo]);
 
   // Set up periodic memory cleanup
   useEffect(() => {
@@ -43,19 +77,19 @@ function App() {
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Loading authentication...</p>
         </div>
       </div>
     );
   }
 
-  // If user is logged in, wait for settings to initialize
-  if (user && !isInitialized) {
+  // If user is logged in, wait for settings to initialize (with timeout protection)
+  if (user && !isInitialized && !settingsTimeout) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Loading settings...</p>
         </div>
       </div>
     );

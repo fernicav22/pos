@@ -39,6 +39,9 @@ export default function POS() {
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
   const [shippingCost, setShippingCost] = useState(0);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   
   // Use refs to track mounted state and abort controller
   const isMountedRef = useRef(true);
@@ -46,6 +49,7 @@ export default function POS() {
   
   // Debounce search query to prevent excessive filtering
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const debouncedCustomerSearchQuery = useDebounce(customerSearchQuery, 300);
 
   // Memoize filtered products to prevent unnecessary recalculations
   const filteredProducts = useMemo(() => {
@@ -72,6 +76,13 @@ export default function POS() {
       }
     };
   }, []);
+
+  // Fetch customers when search modal opens or search query changes
+  useEffect(() => {
+    if (showCustomerSearch) {
+      fetchCustomers();
+    }
+  }, [showCustomerSearch, debouncedCustomerSearchQuery]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -134,6 +145,47 @@ export default function POS() {
       }
     }
   }, []);
+
+  const fetchCustomers = useCallback(async () => {
+    try {
+      setLoadingCustomers(true);
+      
+      let query = supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      // Apply search filter if there's a search query
+      if (debouncedCustomerSearchQuery.trim()) {
+        const searchTerm = debouncedCustomerSearchQuery.toLowerCase();
+        query = query.or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error } = await query.limit(50);
+
+      if (error) throw error;
+
+      if (isMountedRef.current) {
+        setCustomers(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      if (isMountedRef.current) {
+        toast.error('Failed to load customers');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoadingCustomers(false);
+      }
+    }
+  }, [debouncedCustomerSearchQuery]);
+
+  const handleSelectCustomer = (customer: any) => {
+    setSelectedCustomer(customer);
+    setShowCustomerSearch(false);
+    setCustomerSearchQuery('');
+    toast.success(`Customer ${customer.first_name} ${customer.last_name} added`);
+  };
 
   const handleAddToCart = (product: Product) => {
     const existingItem = cart.find(item => item.id === product.id);
@@ -248,18 +300,79 @@ export default function POS() {
     <div className="h-full relative">
       {showCustomerSearch && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full max-h-[80vh] overflow-auto shadow-2xl">
+          <div className="bg-white rounded-xl max-w-md w-full max-h-[80vh] flex flex-col shadow-2xl">
             <div className="sticky top-0 bg-white p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">Select Customer</h3>
               <button
-                onClick={() => setShowCustomerSearch(false)}
+                onClick={() => {
+                  setShowCustomerSearch(false);
+                  setCustomerSearchQuery('');
+                }}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors touch-manipulation"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-4">
-              <p className="text-gray-600 text-sm">Customer search functionality here</p>
+            
+            <div className="p-4 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or phone..."
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 text-base border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 touch-manipulation"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingCustomers ? (
+                <div className="flex justify-center items-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+              ) : customers.length > 0 ? (
+                <div className="space-y-2">
+                  {customers.map((customer) => (
+                    <button
+                      key={customer.id}
+                      onClick={() => handleSelectCustomer(customer)}
+                      className="w-full p-4 border-2 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left touch-manipulation active:scale-98"
+                    >
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                          <span className="text-blue-600 font-semibold text-lg">
+                            {customer.first_name[0]}{customer.last_name[0]}
+                          </span>
+                        </div>
+                        <div className="ml-4 flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">
+                            {customer.first_name} {customer.last_name}
+                          </p>
+                          {customer.email && (
+                            <p className="text-sm text-gray-600 truncate">{customer.email}</p>
+                          )}
+                          {customer.phone && (
+                            <p className="text-sm text-gray-500">{customer.phone}</p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                  <UserPlus className="h-16 w-16 mb-4 text-gray-400" />
+                  <p className="text-lg font-medium">No customers found</p>
+                  <p className="text-sm text-center mt-2">
+                    {customerSearchQuery.trim() 
+                      ? 'Try a different search term' 
+                      : 'Add customers from the Customers page'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -379,7 +492,7 @@ export default function POS() {
         {/* Mobile Cart/Payment Modal */}
         {showPayment && (
           <div className="fixed inset-0 bg-white z-50 flex flex-col">
-            <div className="sticky top-0 bg-white border-b shadow-sm">
+            <div className="sticky top-0 bg-white border-b shadow-sm z-10">
               <div className="p-4 flex items-center">
                 <button
                   onClick={() => setShowPayment(false)}

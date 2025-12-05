@@ -13,6 +13,9 @@ interface SettingsState {
   loadSettings: () => Promise<void>;
 }
 
+// Prevent duplicate settings loads
+let settingsLoadPromise: Promise<void> | null = null;
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
@@ -39,58 +42,79 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       loadSettings: async () => {
-        try {
-          set({ isLoading: true });
-          
-          const { data, error } = await supabase
-            .from('store_settings')
-            .select('*')
-            .limit(1);
-
-          if (error) throw error;
-          
-          // Get the first record if it exists
-          const settingsRecord = data && data.length > 0 ? data[0] : null;
-
-          if (settingsRecord) {
-            // Map database fields to settings structure
-            const loadedSettings = {
-              store: {
-                name: settingsRecord.store_name,
-                address: settingsRecord.store_address,
-                phone: settingsRecord.store_phone || '',
-                email: settingsRecord.store_email || '',
-                website: settingsRecord.store_website || ''
-              },
-              tax: {
-                rate: Number(settingsRecord.tax_rate),
-                inclusive: settingsRecord.tax_inclusive || false
-              },
-              currency: {
-                code: settingsRecord.currency,
-                symbol: settingsRecord.currency === 'USD' ? '$' : settingsRecord.currency,
-                position: 'before' as const
-              },
-              inventory: {
-                lowStockThreshold: settingsRecord.low_stock_threshold || 5,
-                outOfStockThreshold: 0,
-                enableStockTracking: settingsRecord.enable_stock_tracking !== false
-              },
-              receipt: {
-                header: settingsRecord.receipt_header || '',
-                footer: settingsRecord.receipt_footer || '',
-                showTaxDetails: settingsRecord.show_tax_details !== false,
-                showItemizedList: settingsRecord.show_itemized_list !== false
-              }
-            };
-            set({ settings: loadedSettings, isLoading: false, isInitialized: true });
-          } else {
-            set({ isLoading: false, isInitialized: true });
-          }
-        } catch (error) {
-          console.error('Error loading settings:', error);
-          set({ isLoading: false, isInitialized: true });
+        // Deduplicate concurrent load requests
+        if (settingsLoadPromise) {
+          console.log('SettingsStore: Deduplicating settings load request');
+          return settingsLoadPromise;
         }
+
+        // If already initialized, don't reload
+        if (get().isInitialized) {
+          console.log('SettingsStore: Already initialized, skipping load');
+          return;
+        }
+
+        settingsLoadPromise = (async () => {
+          try {
+            set({ isLoading: true });
+            console.log('SettingsStore: Loading settings from database');
+            
+            const { data, error } = await supabase
+              .from('store_settings')
+              .select('*')
+              .limit(1);
+
+            if (error) throw error;
+            
+            // Get the first record if it exists
+            const settingsRecord = data && data.length > 0 ? data[0] : null;
+
+            if (settingsRecord) {
+              // Map database fields to settings structure
+              const loadedSettings = {
+                store: {
+                  name: settingsRecord.store_name,
+                  address: settingsRecord.store_address,
+                  phone: settingsRecord.store_phone || '',
+                  email: settingsRecord.store_email || '',
+                  website: settingsRecord.store_website || ''
+                },
+                tax: {
+                  rate: Number(settingsRecord.tax_rate),
+                  inclusive: settingsRecord.tax_inclusive || false
+                },
+                currency: {
+                  code: settingsRecord.currency,
+                  symbol: settingsRecord.currency === 'USD' ? '$' : settingsRecord.currency,
+                  position: 'before' as const
+                },
+                inventory: {
+                  lowStockThreshold: settingsRecord.low_stock_threshold || 5,
+                  outOfStockThreshold: 0,
+                  enableStockTracking: settingsRecord.enable_stock_tracking !== false
+                },
+                receipt: {
+                  header: settingsRecord.receipt_header || '',
+                  footer: settingsRecord.receipt_footer || '',
+                  showTaxDetails: settingsRecord.show_tax_details !== false,
+                  showItemizedList: settingsRecord.show_itemized_list !== false
+                }
+              };
+              set({ settings: loadedSettings, isLoading: false, isInitialized: true });
+              console.log('SettingsStore: Settings loaded successfully');
+            } else {
+              set({ isLoading: false, isInitialized: true });
+              console.log('SettingsStore: No settings found, using defaults');
+            }
+          } catch (error) {
+            console.error('SettingsStore: Error loading settings:', error);
+            set({ isLoading: false, isInitialized: true });
+          } finally {
+            settingsLoadPromise = null;
+          }
+        })();
+
+        return settingsLoadPromise;
       },
 
       updateSettings: async (newSettings) => {

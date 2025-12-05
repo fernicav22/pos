@@ -25,16 +25,12 @@ export default function Login() {
 
     try {
       await signIn(email, password);
-      console.log('Login successful');
-      
-      // Wait a bit for the auth state to propagate
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      navigate('/', { replace: true });
+      console.log('Login successful - auth state will handle navigation');
+      // Navigation will happen automatically via the Navigate component
+      // when user state is set by authStore
     } catch (error: any) {
       console.error('Login error:', error);
       toast.error(error.message || 'Invalid email or password');
-    } finally {
       setLoading(false);
     }
   };
