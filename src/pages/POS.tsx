@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Search, CreditCard, Banknote, UserPlus, Split, ArrowLeft, Package, X } from 'lucide-react';
+import { Search, CreditCard, Banknote, UserPlus, Split, ArrowLeft, Package, X, Save, FolderOpen } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { checkStock } from '../utils/inventory';
 import { useSettingsStore } from '../store/settingsStore';
 import { useDebounce } from '../hooks/useDebounce';
+import { useAuthStore } from '../store/authStore';
+import { hasPermission } from '../utils/permissions';
+import { DraftOrder, DraftOrderItem } from '../types';
 
 interface Product {
   id: string;
@@ -28,6 +31,7 @@ interface CartItem extends Product {
 
 export default function POS() {
   const { settings, formatCurrency, calculateTax } = useSettingsStore();
+  const { user } = useAuthStore();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +46,20 @@ export default function POS() {
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  
+  // Draft orders state
+  const [draftOrders, setDraftOrders] = useState<DraftOrder[]>([]);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
+  
+  // User permissions
+  const userRole = user?.role || 'cashier';
+  const canCompleteSales = hasPermission(userRole, 'canCompleteSales');
+  const canViewQuantities = hasPermission(userRole, 'canViewQuantities');
+  const isCustomerRole = userRole === 'customer';
   
   // Use refs to track mounted state and abort controller
   const isMountedRef = useRef(true);
@@ -67,6 +85,9 @@ export default function POS() {
     isMountedRef.current = true;
     fetchProducts();
     fetchCategories();
+    if (user?.id) {
+      fetchDraftOrders();
+    }
     
     return () => {
       isMountedRef.current = false;
@@ -75,7 +96,7 @@ export default function POS() {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, [user?.id]);
 
   // Fetch customers when search modal opens or search query changes
   useEffect(() => {
@@ -179,6 +200,155 @@ export default function POS() {
       }
     }
   }, [debouncedCustomerSearchQuery]);
+
+  const fetchDraftOrders = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      setLoadingDrafts(true);
+      const { data, error } = await supabase
+        .from('draft_orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+      if (isMountedRef.current) {
+        setDraftOrders(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching drafts:', error);
+      if (isMountedRef.current) {
+        toast.error('Failed to load draft orders');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoadingDrafts(false);
+      }
+    }
+  }, [user?.id]);
+
+  const saveDraftOrder = async () => {
+    if (!user?.id || cart.length === 0) {
+      toast.error('Cart is empty');
+      return;
+    }
+
+    try {
+      const draftItems: DraftOrderItem[] = cart.map(item => ({
+        product_id: item.id,
+        product_name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity
+      }));
+
+      const draftData = {
+        user_id: user.id,
+        customer_id: selectedCustomer?.id || null,
+        name: draftName || `Draft ${new Date().toLocaleString()}`,
+        items: draftItems,
+        subtotal,
+        tax,
+        shipping: shippingCost,
+        total,
+        notes: null
+      };
+
+      if (currentDraftId) {
+        const { error } = await supabase
+          .from('draft_orders')
+          .update(draftData)
+          .eq('id', currentDraftId);
+
+        if (error) throw error;
+        toast.success('Draft updated');
+      } else {
+        const { error } = await supabase
+          .from('draft_orders')
+          .insert([draftData]);
+
+        if (error) throw error;
+        toast.success('Draft saved');
+      }
+
+      setShowSaveDraftModal(false);
+      setDraftName('');
+      setCart([]);
+      setSelectedCustomer(null);
+      setShippingCost(0);
+      setCurrentDraftId(null);
+      fetchDraftOrders();
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast.error('Failed to save draft');
+    }
+  };
+
+  const loadDraftOrder = async (draft: DraftOrder) => {
+    try {
+      const draftItems = draft.items as DraftOrderItem[];
+      const productIds = draftItems.map(item => item.product_id);
+      
+      const { data: currentProducts, error } = await supabase
+        .from('products')
+        .select('*')
+        .in('id', productIds);
+
+      if (error) throw error;
+
+      const cartItems: CartItem[] = draftItems.map(draftItem => {
+        const product = currentProducts?.find(p => p.id === draftItem.product_id);
+        if (!product) return null;
+
+        return {
+          ...product,
+          quantity: Math.min(draftItem.quantity, product.stock_quantity)
+        };
+      }).filter(Boolean) as CartItem[];
+
+      setCart(cartItems);
+      setCurrentDraftId(draft.id);
+      setShippingCost(draft.shipping);
+      
+      if (draft.customerId) {
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', draft.customerId)
+          .single();
+        
+        if (customer) setSelectedCustomer(customer);
+      }
+
+      setShowDraftModal(false);
+      toast.success(`Loaded: ${draft.name}`);
+    } catch (error) {
+      console.error('Error loading draft:', error);
+      toast.error('Failed to load draft');
+    }
+  };
+
+  const deleteDraftOrder = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('draft_orders')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      
+      toast.success('Draft deleted');
+      fetchDraftOrders();
+      
+      if (currentDraftId === id) {
+        setCurrentDraftId(null);
+      }
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+      toast.error('Failed to delete draft');
+    }
+  };
 
   const handleSelectCustomer = (customer: any) => {
     setSelectedCustomer(customer);
@@ -298,6 +468,100 @@ export default function POS() {
 
   return (
     <div className="h-full relative">
+      {showSaveDraftModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold mb-4">Save Draft Order</h3>
+            <input
+              type="text"
+              placeholder="Draft name (optional)"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              className="w-full px-4 py-3 border rounded-lg mb-4"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowSaveDraftModal(false);
+                  setDraftName('');
+                }}
+                className="flex-1 px-4 py-3 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveDraftOrder}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Save Draft
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDraftModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Draft Orders</h3>
+              <button
+                onClick={() => setShowDraftModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingDrafts ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+              ) : draftOrders.length > 0 ? (
+                <div className="space-y-3">
+                  {draftOrders.map((draft) => (
+                    <div key={draft.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-semibold">{draft.name}</h4>
+                          <p className="text-sm text-gray-600">
+                            {(draft.items as DraftOrderItem[]).length} items • {formatCurrency(draft.total)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(draft.updated_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => loadDraftOrder(draft)}
+                            className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => deleteDraftOrder(draft.id)}
+                            className="px-3 py-1 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <FolderOpen className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                  <p>No draft orders</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCustomerSearch && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full max-h-[80vh] flex flex-col shadow-2xl">
@@ -458,7 +722,17 @@ export default function POS() {
                   <p className="text-xs text-gray-600 font-medium mt-1">
                     {formatCurrency(product.price)}
                   </p>
-                  <p className="text-xs text-gray-500">Stock: {product.stock_quantity}</p>
+                  {canViewQuantities ? (
+                    <p className="text-xs text-gray-500">Stock: {product.stock_quantity}</p>
+                  ) : (
+                    <p className="text-xs">
+                      {product.stock_quantity > 0 ? (
+                        <span className="text-green-600 font-medium">In Stock</span>
+                      ) : (
+                        <span className="text-red-600 font-medium">Out of Stock</span>
+                      )}
+                    </p>
+                  )}
                 </button>
               ))
             ) : (
@@ -567,6 +841,39 @@ export default function POS() {
                     </div>
                   </div>
 
+                  {isCustomerRole && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                      <p className="text-sm text-yellow-800 font-medium">
+                        🎓 Training Mode - Save drafts for staff to complete
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Draft buttons */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setShowDraftModal(true)}
+                      className="flex-1 px-4 py-2 border-2 rounded-lg hover:bg-gray-50 flex items-center justify-center"
+                    >
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      Load
+                    </button>
+                    <button
+                      onClick={() => setShowSaveDraftModal(true)}
+                      disabled={cart.length === 0}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50 flex items-center justify-center"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      Save
+                    </button>
+                  </div>
+
+                  {currentDraftId && (
+                    <div className="mb-4 px-3 py-2 bg-yellow-100 text-yellow-800 text-sm rounded-lg text-center">
+                      Editing Draft
+                    </div>
+                  )}
+
                   {/* Summary */}
                   <div className="bg-gray-50 p-4 rounded-xl space-y-2 mb-4 flex-shrink-0">
                     <div className="flex justify-between text-sm">
@@ -650,19 +957,23 @@ export default function POS() {
             <div className="flex-shrink-0 bg-white border-t p-4 space-y-3 safe-area-bottom">
               {!paymentMethod ? (
                 <>
-                  <button
-                    onClick={() => setPaymentMethod('selecting')}
-                    disabled={cart.length === 0}
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-98 transition-transform shadow-lg"
-                  >
-                    Continue to Payment
-                  </button>
-                  <button
-                    onClick={() => setShowPayment(false)}
-                    className="w-full border-2 border-blue-500 text-blue-600 py-4 rounded-xl font-semibold touch-manipulation active:scale-98 transition-transform"
-                  >
-                    Add More Items
-                  </button>
+                  {canCompleteSales ? (
+                    <button
+                      onClick={() => setPaymentMethod('selecting')}
+                      disabled={cart.length === 0}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-98 transition-transform shadow-lg"
+                    >
+                      Continue to Payment
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowSaveDraftModal(true)}
+                      disabled={cart.length === 0}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-98 transition-transform shadow-lg"
+                    >
+                      Save as Draft for Staff
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setCart([]);
@@ -858,15 +1169,31 @@ export default function POS() {
             </div>
           ) : (
             <>
-              <div className="p-4 border-b flex justify-between items-center">
-                <h2 className="text-lg font-medium">Current Sale</h2>
-                <button
-                  onClick={() => setShowCustomerSearch(true)}
-                  className="flex items-center text-blue-600 hover:text-blue-700"
-                >
-                  <UserPlus className="h-5 w-5 mr-1" />
-                  <span>{selectedCustomer ? 'Change Customer' : 'Add Customer'}</span>
-                </button>
+              <div className="p-4 border-b">
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="text-lg font-medium">Current Sale</h2>
+                  <button
+                    onClick={() => setShowCustomerSearch(true)}
+                    className="flex items-center text-blue-600 hover:text-blue-700 text-sm"
+                  >
+                    <UserPlus className="h-4 w-4 mr-1" />
+                    <span>{selectedCustomer ? 'Change' : 'Add Customer'}</span>
+                  </button>
+                </div>
+                
+                {isCustomerRole && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                    <p className="text-xs text-yellow-800 font-medium">
+                      🎓 Training Mode
+                    </p>
+                  </div>
+                )}
+
+                {currentDraftId && (
+                  <div className="mt-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded text-center">
+                    Editing Draft
+                  </div>
+                )}
               </div>
 
               {selectedCustomer && (
@@ -892,8 +1219,11 @@ export default function POS() {
                 {cart.map((item) => (
                   <div key={item.id} className="flex items-center justify-between py-2">
                     <div className="flex-1">
-                      <h3 className="font-medium">{item.name}</h3>
-                      <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
+                <h3 className="font-medium truncate">{item.name}</h3>
+                <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
+                {canViewQuantities && (
+                  <p className="text-xs text-gray-500">Stock: {item.stock_quantity}</p>
+                )}
                     </div>
                     <div className="flex items-center">
                       <input
@@ -916,6 +1246,24 @@ export default function POS() {
               </div>
 
               <div className="p-4 border-t">
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setShowDraftModal(true)}
+                    className="flex-1 px-3 py-2 border rounded-lg hover:bg-gray-50 text-sm flex items-center justify-center"
+                  >
+                    <FolderOpen className="h-4 w-4 mr-1" />
+                    Load
+                  </button>
+                  <button
+                    onClick={() => setShowSaveDraftModal(true)}
+                    disabled={cart.length === 0}
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50 text-sm flex items-center justify-center"
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    Save
+                  </button>
+                </div>
+
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-sm">
                     <span>Subtotal</span>
@@ -945,13 +1293,23 @@ export default function POS() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <button
-                    onClick={() => setShowPayment(true)}
-                    disabled={cart.length === 0}
-                    className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Proceed to Payment
-                  </button>
+                  {canCompleteSales ? (
+                    <button
+                      onClick={() => setShowPayment(true)}
+                      disabled={cart.length === 0}
+                      className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Proceed to Payment
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowSaveDraftModal(true)}
+                      disabled={cart.length === 0}
+                      className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Save as Draft for Staff
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setCart([]);

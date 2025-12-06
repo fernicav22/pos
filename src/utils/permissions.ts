@@ -10,6 +10,8 @@ export const rolePermissions: Record<UserRole, {
   canAccessTransactions: boolean;
   canAccessStaff: boolean;
   canAccessSettings: boolean;
+  canCompleteSales: boolean;
+  canViewQuantities: boolean;
 }> = {
   admin: {
     canAccessPOS: true,
@@ -20,6 +22,8 @@ export const rolePermissions: Record<UserRole, {
     canAccessTransactions: true,
     canAccessStaff: true,
     canAccessSettings: true,
+    canCompleteSales: true,
+    canViewQuantities: true,
   },
   manager: {
     canAccessPOS: true,
@@ -30,6 +34,8 @@ export const rolePermissions: Record<UserRole, {
     canAccessTransactions: true,
     canAccessStaff: false,
     canAccessSettings: false,
+    canCompleteSales: true,
+    canViewQuantities: true,
   },
   cashier: {
     canAccessPOS: true,
@@ -40,6 +46,20 @@ export const rolePermissions: Record<UserRole, {
     canAccessTransactions: true,
     canAccessStaff: false,
     canAccessSettings: false,
+    canCompleteSales: true,
+    canViewQuantities: true,
+  },
+  customer: {
+    canAccessPOS: true,
+    canAccessProducts: false,
+    canAccessCustomers: false,
+    canAccessPurchases: false,
+    canAccessReports: false,
+    canAccessTransactions: false,
+    canAccessStaff: false,
+    canAccessSettings: false,
+    canCompleteSales: false,
+    canViewQuantities: false,
   },
 };
 

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'manager' | 'cashier';
+export type UserRole = 'admin' | 'manager' | 'cashier' | 'customer';
 
 export interface User {
   id: string;
@@ -76,4 +76,27 @@ export interface SaleItem {
   quantity: number;
   price: number;
   discount: number;
+}
+
+export interface DraftOrder {
+  id: string;
+  userId: string;
+  customerId?: string;
+  name?: string;
+  items: DraftOrderItem[];
+  subtotal: number;
+  tax: number;
+  shipping: number;
+  total: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DraftOrderItem {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  price: number;
+  subtotal: number;
 }
