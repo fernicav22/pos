@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { BarChart3, DollarSign, Package, Users } from 'lucide-react';
+import { BarChart3, DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { useSettingsStore } from '../store/settingsStore';
+import { useAuthStore } from '../store/authStore';
 
 interface DashboardStats {
   totalSales: number;
@@ -12,6 +13,7 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
+  const { user } = useAuthStore();
   const [timeRange, setTimeRange] = useState('today');
   const [stats, setStats] = useState<DashboardStats>({
     totalSales: 0,
@@ -24,6 +26,9 @@ export default function Dashboard() {
   
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Check if user is customer role
+  const isCustomerRole = user?.role === 'customer';
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -130,6 +135,77 @@ export default function Dashboard() {
     },
   ];
 
+  // Customer role sees a simplified welcome screen
+  if (isCustomerRole) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-semibold text-gray-900">Welcome to POS</h1>
+        </div>
+
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-lg p-8 md:p-12">
+          <div className="flex flex-col items-center text-center">
+            <div className="bg-blue-100 rounded-full p-6 mb-6">
+              <ShoppingCart className="h-16 w-16 text-blue-600" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Welcome, {user?.firstName}!
+            </h2>
+            <p className="text-lg text-gray-700 mb-6 max-w-2xl">
+              You're in training mode. Browse products, add items to cart, and create draft orders. 
+              A staff member will complete the sale for you.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl mt-8">
+              <div className="bg-white rounded-lg p-6 shadow-md">
+                <div className="bg-green-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4">
+                  <Package className="h-6 w-6 text-green-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Browse Products</h3>
+                <p className="text-sm text-gray-600">
+                  View available products and check stock status
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-6 shadow-md">
+                <div className="bg-purple-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4">
+                  <ShoppingCart className="h-6 w-6 text-purple-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Add to Cart</h3>
+                <p className="text-sm text-gray-600">
+                  Select items and see prices in your cart
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-6 shadow-md">
+                <div className="bg-orange-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-4">
+                  <BarChart3 className="h-6 w-6 text-orange-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Save Drafts</h3>
+                <p className="text-sm text-gray-600">
+                  Create draft orders for staff to complete
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                <strong>Training Mode:</strong> You can browse and add items to cart, but a staff member must complete the final sale.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Regular dashboard for admin, manager, and cashier roles
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">

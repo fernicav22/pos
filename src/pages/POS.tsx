@@ -206,11 +206,19 @@ export default function POS() {
     
     try {
       setLoadingDrafts(true);
-      const { data, error } = await supabase
+      
+      // Build query based on user role
+      let query = supabase
         .from('draft_orders')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
+        .select('*');
+      
+      // Only customer role is restricted to their own drafts
+      // Admin, manager, and cashier can see all draft orders
+      if (userRole === 'customer') {
+        query = query.eq('user_id', user.id);
+      }
+      
+      const { data, error } = await query.order('updated_at', { ascending: false });
 
       if (error) throw error;
       if (isMountedRef.current) {
@@ -226,7 +234,7 @@ export default function POS() {
         setLoadingDrafts(false);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, userRole]);
 
   const saveDraftOrder = async () => {
     if (!user?.id || cart.length === 0) {
@@ -453,13 +461,30 @@ export default function POS() {
 
       if (itemsError) throw itemsError;
 
+      // If this sale was from a draft order, delete the draft
+      if (currentDraftId) {
+        const { error: deleteDraftError } = await supabase
+          .from('draft_orders')
+          .delete()
+          .eq('id', currentDraftId);
+        
+        if (deleteDraftError) {
+          console.error('Error deleting draft after sale:', deleteDraftError);
+          // Don't throw error - sale was successful, just log the draft deletion issue
+        } else {
+          console.log('Draft order deleted after successful sale');
+        }
+      }
+
       toast.success('Sale completed successfully');
       setShowPayment(false);
       setCart([]);
       setSelectedCustomer(null);
       setShippingCost(0);
       setPaymentMethod('');
+      setCurrentDraftId(null); // Clear the draft ID
       fetchProducts(); // Refresh products to show updated stock levels
+      fetchDraftOrders(); // Refresh draft orders list
     } catch (error: any) {
       console.error('Error processing sale:', error);
       toast.error(error.message || 'Failed to process sale');
@@ -719,9 +744,11 @@ export default function POS() {
                     <Package className="h-10 w-10 text-gray-400" />
                   </div>
                   <h3 className="font-semibold text-sm truncate">{product.name}</h3>
-                  <p className="text-xs text-gray-600 font-medium mt-1">
-                    {formatCurrency(product.price)}
-                  </p>
+                  {!isCustomerRole && (
+                    <p className="text-xs text-gray-600 font-medium mt-1">
+                      {formatCurrency(product.price)}
+                    </p>
+                  )}
                   {canViewQuantities ? (
                     <p className="text-xs text-gray-500">Stock: {product.stock_quantity}</p>
                   ) : (
@@ -1060,9 +1087,19 @@ export default function POS() {
                     <Package className="h-8 w-8" />
                   </div>
                   <h3 className="font-medium truncate">{product.name}</h3>
-                  <p className="text-sm text-gray-600">
-                    {formatCurrency(product.price)} - Stock: {product.stock_quantity}
-                  </p>
+                  {!isCustomerRole ? (
+                    <p className="text-sm text-gray-600">
+                      {formatCurrency(product.price)} - Stock: {product.stock_quantity}
+                    </p>
+                  ) : (
+                    <p className="text-sm">
+                      {product.stock_quantity > 0 ? (
+                        <span className="text-green-600 font-medium">In Stock</span>
+                      ) : (
+                        <span className="text-red-600 font-medium">Out of Stock</span>
+                      )}
+                    </p>
+                  )}
                 </button>
               ))
             ) : (
