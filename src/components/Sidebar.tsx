@@ -19,8 +19,8 @@ interface SidebarProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', icon: LayoutDashboard, path: '/', role: ['admin', 'manager', 'cashier'] },
   { name: 'Point of Sale', icon: ShoppingCart, path: '/pos', role: ['admin', 'manager', 'cashier', 'customer'] },
+  { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', role: ['admin', 'manager', 'cashier'] },
   { name: 'Products', icon: Package, path: '/products', role: ['admin', 'manager'] },
   { name: 'Customers', icon: Users, path: '/customers', role: ['admin', 'manager', 'cashier'] },
   { name: 'Purchases', icon: Truck, path: '/purchases', role: ['admin', 'manager'] },

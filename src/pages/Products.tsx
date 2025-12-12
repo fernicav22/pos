@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Plus, Search, Filter, BarChart2, Download, Upload, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface Product {
   id: string;
@@ -50,6 +51,33 @@ export default function Products() {
   
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Debounce search query to prevent excessive filtering
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Memoize filtered products to prevent unnecessary recalculations
+  const filteredProducts = useMemo(() => {
+    let filtered = [...products];
+
+    // Apply search filter
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase();
+      filtered = filtered.filter(product => 
+        product.name.toLowerCase().includes(query) ||
+        product.sku.toLowerCase().includes(query) ||
+        (product.barcode && product.barcode.toLowerCase().includes(query))
+      );
+    }
+
+    // Apply category filter
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(product => 
+        product.category && product.category.toLowerCase() === selectedCategory.toLowerCase()
+      );
+    }
+
+    return filtered;
+  }, [products, debouncedSearchQuery, selectedCategory]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -336,7 +364,22 @@ export default function Products() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {products.map((product) => (
+              {filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center text-gray-500">
+                      <Search className="h-12 w-12 mb-4 text-gray-400" />
+                      <p className="text-lg font-medium">No products found</p>
+                      <p className="text-sm">
+                        {debouncedSearchQuery.trim() || selectedCategory !== 'all'
+                          ? 'Try adjusting your search or filters'
+                          : 'Add your first product to get started'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((product) => (
                 <tr key={product.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -393,7 +436,8 @@ export default function Products() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -411,9 +455,11 @@ export default function Products() {
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-gray-700">
-                  Showing <span className="font-medium">1</span> to{' '}
-                  <span className="font-medium">10</span> of{' '}
-                  <span className="font-medium">20</span> results
+                  Showing <span className="font-medium">{filteredProducts.length}</span> of{' '}
+                  <span className="font-medium">{products.length}</span> products
+                  {(debouncedSearchQuery.trim() || selectedCategory !== 'all') && (
+                    <span className="ml-1 text-gray-500">(filtered)</span>
+                  )}
                 </p>
               </div>
               <div>

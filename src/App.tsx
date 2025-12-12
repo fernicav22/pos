@@ -101,7 +101,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Navigate to="/pos" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="pos" element={
             <ProtectedRoute permission="canAccessPOS">
               <POS />

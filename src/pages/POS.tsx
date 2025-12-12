@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Search, CreditCard, Banknote, UserPlus, Split, ArrowLeft, Package, X, Save, FolderOpen } from 'lucide-react';
+import { Search, CreditCard, Banknote, UserPlus, Split, ArrowLeft, Package, X, Save, FolderOpen, Receipt, Mail, Printer } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { checkStock } from '../utils/inventory';
@@ -8,6 +8,8 @@ import { useDebounce } from '../hooks/useDebounce';
 import { useAuthStore } from '../store/authStore';
 import { hasPermission } from '../utils/permissions';
 import { DraftOrder, DraftOrderItem } from '../types';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface Product {
   id: string;
@@ -29,6 +31,39 @@ interface CartItem extends Product {
   quantity: number;
 }
 
+interface TransactionItem {
+  id: string;
+  product: {
+    name: string;
+    sku: string;
+  };
+  quantity: number;
+  price: number;
+  subtotal: number;
+}
+
+interface CompletedSale {
+  id: string;
+  created_at: string;
+  total: number;
+  subtotal: number;
+  tax: number;
+  shipping: number;
+  payment_method: string;
+  payment_status: string;
+  customer_id: string | null;
+  user: {
+    first_name: string;
+    last_name: string;
+  } | null;
+  customer?: {
+    first_name: string;
+    last_name: string;
+    email?: string;
+  } | null;
+  items: TransactionItem[];
+}
+
 export default function POS() {
   const { settings, formatCurrency, calculateTax } = useSettingsStore();
   const { user } = useAuthStore();
@@ -46,6 +81,12 @@ export default function POS() {
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  
+  // Payment processing state
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
   
   // Draft orders state
   const [draftOrders, setDraftOrders] = useState<DraftOrder[]>([]);
@@ -407,11 +448,19 @@ export default function POS() {
   const total = subtotal + tax + shippingCost;
 
   const handlePayment = async () => {
+    // Prevent multiple simultaneous payment processing
+    if (isProcessing) {
+      return;
+    }
+
     try {
       if (!paymentMethod) {
         toast.error('Please select a payment method');
         return;
       }
+
+      // Set processing state to prevent duplicate submissions
+      setIsProcessing(true);
 
       // First check if we have sufficient stock for all items
       const stockCheck = await checkStock(
@@ -476,19 +525,147 @@ export default function POS() {
         }
       }
 
+      // Fetch complete sale details with items for receipt
+      const { data: saleWithUser, error: saleUserError } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          user:users(first_name, last_name),
+          customer:customers(first_name, last_name, email)
+        `)
+        .eq('id', sale.id)
+        .single();
+
+      if (saleUserError) throw saleUserError;
+
+      const { data: items, error: itemsDetailError } = await supabase
+        .from('sale_items')
+        .select(`
+          *,
+          product:products(name, sku)
+        `)
+        .eq('sale_id', sale.id);
+
+      if (itemsDetailError) throw itemsDetailError;
+
+      // Set completed sale data and show receipt
+      setCompletedSale({
+        ...saleWithUser,
+        items: items || []
+      });
+      
       toast.success('Sale completed successfully');
+      
+      // Reset cart and payment state
       setShowPayment(false);
       setCart([]);
       setSelectedCustomer(null);
       setShippingCost(0);
       setPaymentMethod('');
-      setCurrentDraftId(null); // Clear the draft ID
-      fetchProducts(); // Refresh products to show updated stock levels
-      fetchDraftOrders(); // Refresh draft orders list
+      setCurrentDraftId(null);
+      
+      // Show receipt modal
+      setShowReceipt(true);
+      
+      // Refresh products and drafts in background
+      fetchProducts();
+      fetchDraftOrders();
     } catch (error: any) {
       console.error('Error processing sale:', error);
       toast.error(error.message || 'Failed to process sale');
+    } finally {
+      // Always reset processing state
+      setIsProcessing(false);
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const generatePDF = async () => {
+    if (!receiptRef.current) return;
+
+    try {
+      // Detect if we're on mobile
+      const isMobile = window.innerWidth < 768;
+      
+      // Configure html2canvas with better settings for mobile
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: isMobile ? 2 : 3,
+        useCORS: true,
+        logging: false,
+        windowWidth: isMobile ? receiptRef.current.scrollWidth : undefined,
+        windowHeight: isMobile ? receiptRef.current.scrollHeight : undefined
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      
+      // Adjust PDF format based on device
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: isMobile ? [80, 297] : 'a4',
+        compress: true
+      });
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Add padding for mobile
+      const padding = isMobile ? 2 : 0;
+
+      pdf.addImage(imgData, 'PNG', padding, padding, pdfWidth - (padding * 2), pdfHeight);
+      return pdf;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      throw error;
+    }
+  };
+
+  const handleEmailReceipt = async () => {
+    if (!completedSale) return;
+
+    try {
+      const pdf = await generatePDF();
+      if (!pdf) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      toast.success('Email sent successfully!');
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast.error('Failed to send email');
+    }
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!completedSale) return;
+
+    try {
+      const pdf = await generatePDF();
+      if (!pdf) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      pdf.autoPrint();
+      window.open(pdf.output('bloburl'), '_blank');
+    } catch (error) {
+      console.error('Error printing:', error);
+      toast.error('Failed to print receipt');
+    }
+  };
+
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    setCompletedSale(null);
   };
 
   return (
@@ -1017,15 +1194,32 @@ export default function POS() {
                 <>
                   <button
                     onClick={handlePayment}
-                    className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-4 rounded-xl font-semibold text-lg touch-manipulation active:scale-98 transition-transform shadow-lg"
+                    disabled={isProcessing}
+                    className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-4 rounded-xl font-semibold text-lg touch-manipulation active:scale-98 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
-                    Complete Payment - {formatCurrency(total)}
+                    {isProcessing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-2"></div>
+                        Processing...
+                      </>
+                    ) : (
+                      `Complete Payment - ${formatCurrency(total)}`
+                    )}
                   </button>
                   <button
                     onClick={() => setPaymentMethod('')}
                     className="w-full border-2 border-gray-300 py-4 rounded-xl font-semibold touch-manipulation active:scale-98 transition-transform"
                   >
                     Back to Cart
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPayment(false);
+                      setPaymentMethod('');
+                    }}
+                    className="w-full border-2 border-blue-500 text-blue-600 py-3 rounded-xl font-medium touch-manipulation active:scale-98 transition-transform"
+                  >
+                    Add More Items
                   </button>
                 </>
               )}
@@ -1194,13 +1388,29 @@ export default function POS() {
                 </div>
               </div>
 
-              <div className="p-4 border-t">
+              <div className="p-4 border-t space-y-2">
                 <button
                   onClick={handlePayment}
-                  disabled={!paymentMethod}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!paymentMethod || isProcessing}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
-                  Complete Payment
+                  {isProcessing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    'Complete Payment'
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPayment(false);
+                    setPaymentMethod('');
+                  }}
+                  className="w-full border border-gray-300 py-2 rounded-lg hover:bg-gray-50"
+                >
+                  Add More Items
                 </button>
               </div>
             </div>
@@ -1363,6 +1573,242 @@ export default function POS() {
           )}
         </div>
       </div>
+
+      {/* Receipt Modal */}
+      {showReceipt && completedSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-4xl w-full my-4 sm:my-8 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 md:p-8">
+              <div className="flex justify-between items-start mb-4 sm:mb-6 md:mb-8">
+                <div className="flex items-center space-x-2 sm:space-x-3">
+                  <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                    Sale Completed!
+                  </h2>
+                </div>
+                <button
+                  onClick={handleCloseReceipt}
+                  className="text-gray-400 hover:text-gray-500 transition-colors"
+                >
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                </button>
+              </div>
+
+              <div ref={receiptRef} className="space-y-4 sm:space-y-6 md:space-y-8 bg-white">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
+                  <div className="space-y-4 sm:space-y-6">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Transaction Info</h3>
+                      <div className="space-y-2 sm:space-y-3">
+                        <div>
+                          <span className="text-xs sm:text-sm text-gray-500">Transaction ID</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900 break-all">#{completedSale.id}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs sm:text-sm text-gray-500">Date</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900">
+                            {formatDate(completedSale.created_at)}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs sm:text-sm text-gray-500">Payment Method</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900 capitalize">
+                            {completedSale.payment_method}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4 sm:space-y-6">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Customer & Staff</h3>
+                      <div className="space-y-2 sm:space-y-3">
+                        <div>
+                          <span className="text-xs sm:text-sm text-gray-500">Customer</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900">
+                            {completedSale.customer
+                              ? `${completedSale.customer.first_name} ${completedSale.customer.last_name}`
+                              : 'Walk-in Customer'}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs sm:text-sm text-gray-500">Cashier</span>
+                          <p className="text-xs sm:text-sm font-medium text-gray-900">
+                            {completedSale.user
+                              ? `${completedSale.user.first_name} ${completedSale.user.last_name}`
+                              : 'Unknown User'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4 sm:pt-6 md:pt-8">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-3 sm:mb-4">Items</h3>
+                  
+                  {/* Mobile-friendly card layout for small screens */}
+                  <div className="block sm:hidden space-y-3">
+                    {completedSale.items.map((item) => (
+                      <div key={item.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                            <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-gray-500">Qty:</span>
+                            <p className="font-medium text-gray-900">{item.quantity}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Price:</span>
+                            <p className="font-medium text-gray-900">{formatCurrency(item.price)}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Total:</span>
+                            <p className="font-medium text-gray-900">{formatCurrency(item.subtotal)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Mobile totals */}
+                    <div className="border-t border-gray-200 pt-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Subtotal</span>
+                        <span className="text-gray-900">{formatCurrency(completedSale.subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Tax</span>
+                        <span className="text-gray-900">{formatCurrency(completedSale.tax)}</span>
+                      </div>
+                      {completedSale.shipping > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Shipping</span>
+                          <span className="text-gray-900">{formatCurrency(completedSale.shipping)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base font-medium border-t border-gray-200 pt-2">
+                        <span className="text-gray-900">Total</span>
+                        <span className="text-green-600">{formatCurrency(completedSale.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Desktop table layout */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead>
+                        <tr>
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Product
+                          </th>
+                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            SKU
+                          </th>
+                          <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Quantity
+                          </th>
+                          <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Price
+                          </th>
+                          <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Subtotal
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {completedSale.items.map((item) => (
+                          <tr key={item.id}>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900">
+                              {item.product.name}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500">
+                              {item.product.sku}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
+                              {item.quantity}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
+                              {formatCurrency(item.price)}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
+                              {formatCurrency(item.subtotal)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
+                            Subtotal
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
+                            {formatCurrency(completedSale.subtotal)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
+                            Tax
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
+                            {formatCurrency(completedSale.tax)}
+                          </td>
+                        </tr>
+                        {completedSale.shipping > 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
+                              Shipping
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
+                              {formatCurrency(completedSale.shipping)}
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="border-t border-gray-200">
+                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-gray-900 text-right">
+                            Total
+                          </td>
+                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-green-600 text-right">
+                            {formatCurrency(completedSale.total)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 sm:mt-6 md:mt-8 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
+                {completedSale.customer?.email && (
+                  <button
+                    onClick={handleEmailReceipt}
+                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Email Receipt
+                  </button>
+                )}
+                <button
+                  onClick={handlePrintReceipt}
+                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print Receipt
+                </button>
+                <button
+                  onClick={handleCloseReceipt}
+                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                >
+                  Close & Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
