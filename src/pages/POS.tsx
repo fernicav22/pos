@@ -105,6 +105,7 @@ export default function POS() {
   // Use refs to track mounted state and abort controller
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isProcessingRef = useRef(false);  // ✅ Use ref for synchronous state check
   
   // Debounce search query to prevent excessive filtering
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -448,8 +449,9 @@ export default function POS() {
   const total = subtotal + tax + shippingCost;
 
   const handlePayment = async () => {
-    // Prevent multiple simultaneous payment processing
-    if (isProcessing) {
+    // ✅ Use ref-based guard to prevent race conditions (synchronous check)
+    if (isProcessingRef.current) {
+      console.warn('Payment already processing, ignoring duplicate request');
       return;
     }
 
@@ -459,7 +461,8 @@ export default function POS() {
         return;
       }
 
-      // Set processing state to prevent duplicate submissions
+      // ✅ Set ref immediately before async operations
+      isProcessingRef.current = true;
       setIsProcessing(true);
 
       // First check if we have sufficient stock for all items
@@ -573,8 +576,10 @@ export default function POS() {
     } catch (error: any) {
       console.error('Error processing sale:', error);
       toast.error(error.message || 'Failed to process sale');
+      isProcessingRef.current = false;  // ✅ Clear ref on error
     } finally {
-      // Always reset processing state
+      // ✅ Always reset both ref and state
+      isProcessingRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -590,43 +595,80 @@ export default function POS() {
   };
 
   const generatePDF = async () => {
-    if (!receiptRef.current) return;
+    if (!receiptRef.current) return null;
 
+    let canvas: HTMLCanvasElement | null = null;
+    let pdf: jsPDF | null = null;
+    
     try {
-      // Detect if we're on mobile
       const isMobile = window.innerWidth < 768;
       
-      // Configure html2canvas with better settings for mobile
-      const canvas = await html2canvas(receiptRef.current, {
-        scale: isMobile ? 2 : 3,
+      // Create canvas with lower scale for mobile to prevent memory issues
+      canvas = await html2canvas(receiptRef.current, {
+        scale: isMobile ? 1.5 : 2, // Reduced scale
         useCORS: true,
         logging: false,
-        windowWidth: isMobile ? receiptRef.current.scrollWidth : undefined,
-        windowHeight: isMobile ? receiptRef.current.scrollHeight : undefined
+        windowWidth: receiptRef.current.scrollWidth,
+        windowHeight: receiptRef.current.scrollHeight,
+        onclone: (clonedDoc) => {
+          // Clean up cloned document references
+          clonedDoc.querySelectorAll('script').forEach(s => s.remove());
+        }
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      // Immediately convert to data URL and release canvas
+      const imgData = canvas.toDataURL('image/png', 0.8); // Reduced quality for smaller size
       
-      // Adjust PDF format based on device
-      const pdf = new jsPDF({
+      // Clear canvas immediately after getting data
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      canvas.width = 1;
+      canvas.height = 1;
+      
+      // Create PDF with compression
+      pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: isMobile ? [80, 297] : 'a4',
-        compress: true
+        compress: true,
+        putOnlyUsedFonts: true
       });
 
       const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      // Add padding for mobile
       const padding = isMobile ? 2 : 0;
-
-      pdf.addImage(imgData, 'PNG', padding, padding, pdfWidth - (padding * 2), pdfHeight);
+      pdf.addImage(
+        imgData, 
+        'PNG', 
+        padding, 
+        padding, 
+        pdfWidth - (padding * 2), 
+        pdfHeight,
+        undefined,
+        'FAST' // Use fast compression
+      );
+      
       return pdf;
     } catch (error) {
       console.error('Error generating PDF:', error);
+      if (pdf) {
+        pdf = null;
+      }
       throw error;
+    } finally {
+      // Ensure canvas is always cleaned up
+      if (canvas) {
+        canvas.remove?.(); // Remove from DOM if attached
+        canvas = null;
+      }
+      // Force garbage collection hint
+      if (typeof (window as any).gc === 'function') {
+        (window as any).gc();
+      }
     }
   };
 
@@ -655,8 +697,8 @@ export default function POS() {
         throw new Error('Failed to generate PDF');
       }
       
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      (pdf as jsPDF).autoPrint();
+      window.open((pdf as jsPDF).output('bloburl'), '_blank');
     } catch (error) {
       console.error('Error printing:', error);
       toast.error('Failed to print receipt');

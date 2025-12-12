@@ -26,26 +26,46 @@ const fetchAndSetUser = async (userId: string, timeout = 10000): Promise<void> =
   }
 
   fetchUserPromise = (async () => {
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    
     try {
       console.log('AuthStore: Fetching user data for ID:', userId);
       
-      // Create timeout promise
+      // Create a promise that rejects after timeout
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('User fetch timeout')), timeout);
+        timeoutHandle = setTimeout(() => {
+          reject(new Error('User fetch timeout'));
+        }, timeout);
       });
-
+      
+      // Create the fetch promise
+      const fetchPromise = supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
       // Race between fetch and timeout
       const { data: userData, error: userError } = await Promise.race([
-        supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single(),
-        timeoutPromise
-      ]) as any;
+        fetchPromise,
+        timeoutPromise.catch(timeoutError => ({ 
+          data: null, 
+          error: timeoutError 
+        }))
+      ]);
+      
+      // Clear timeout on success
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
 
       if (userError) {
-        console.error('AuthStore: Error fetching user data:', userError);
+        if (userError.message === 'User fetch timeout') {
+          console.error('AuthStore: User fetch timeout after', timeout, 'ms');
+        } else {
+          console.error('AuthStore: Error fetching user data:', userError);
+        }
         useAuthStore.getState().setUser(null);
         return;
       }
@@ -69,11 +89,20 @@ const fetchAndSetUser = async (userId: string, timeout = 10000): Promise<void> =
 
       console.log('AuthStore: Setting user state');
       useAuthStore.getState().setUser(userState);
-    } catch (error) {
-      console.error('AuthStore: Exception in fetchAndSetUser:', error);
+    } catch (error: any) {
+      if (error.message === 'User fetch timeout') {
+        console.error('AuthStore: User fetch timeout after', timeout, 'ms');
+      } else {
+        console.error('AuthStore: Exception in fetchAndSetUser:', error);
+      }
       useAuthStore.getState().setUser(null);
     } finally {
-      // Always clear the promise to allow future fetches
+      // Always cleanup timeout
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
+      // Clear the promise to allow future fetches
       fetchUserPromise = null;
     }
   })();
