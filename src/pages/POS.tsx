@@ -1179,6 +1179,13 @@ export default function POS() {
                     </button>
                   )}
                   <button
+                    onClick={() => setShowPayment(false)}
+                    className="w-full border-2 border-blue-500 text-blue-600 py-4 rounded-xl font-semibold touch-manipulation active:scale-98 transition-transform"
+                  >
+                    <ArrowLeft className="h-5 w-5 inline mr-2" />
+                    Back to Products
+                  </button>
+                  <button
                     onClick={() => {
                       setCart([]);
                       setShippingCost(0);
@@ -1567,6 +1574,13 @@ export default function POS() {
                   >
                     Clear Cart
                   </button>
+                </div>
+                
+                {/* Desktop info note */}
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-700 text-center">
+                    💡 Products are visible on the left. Add items directly from the product grid.
+                  </p>
                 </div>
               </div>
             </>
