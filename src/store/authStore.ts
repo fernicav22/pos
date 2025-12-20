@@ -17,8 +17,8 @@ let isInitialized = false;
 let fetchUserPromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
 
-// Helper function to fetch and set user data with deduplication
-const fetchAndSetUser = async (userId: string, timeout = 10000): Promise<void> => {
+// Helper function to fetch and set user data with deduplication and retry logic
+const fetchAndSetUser = async (userId: string, maxRetries = 2): Promise<void> => {
   // Deduplicate concurrent requests for the same user
   if (fetchUserPromise) {
     console.log('AuthStore: Deduplicating user fetch request');
@@ -26,85 +26,100 @@ const fetchAndSetUser = async (userId: string, timeout = 10000): Promise<void> =
   }
 
   fetchUserPromise = (async () => {
-    let timeoutHandle: NodeJS.Timeout | null = null;
+    let lastError: any = null;
     
-    try {
-      console.log('AuthStore: Fetching user data for ID:', userId);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let timeoutHandle: NodeJS.Timeout | null = null;
       
-      // Create a promise that rejects after timeout
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutHandle = setTimeout(() => {
-          reject(new Error('User fetch timeout'));
-        }, timeout);
-      });
-      
-      // Create the fetch promise
-      const fetchPromise = supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      
-      // Race between fetch and timeout
-      const { data: userData, error: userError } = await Promise.race([
-        fetchPromise,
-        timeoutPromise.catch(timeoutError => ({ 
-          data: null, 
-          error: timeoutError 
-        }))
-      ]);
-      
-      // Clear timeout on success
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-        timeoutHandle = null;
-      }
-
-      if (userError) {
-        if (userError.message === 'User fetch timeout') {
-          console.error('AuthStore: User fetch timeout after', timeout, 'ms');
-        } else {
-          console.error('AuthStore: Error fetching user data:', userError);
+      try {
+        if (attempt > 0) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          console.log(`AuthStore: Retry attempt ${attempt}/${maxRetries}, waiting ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
+        
+        console.log('AuthStore: Fetching user data for ID:', userId);
+        
+        // Create a promise that rejects after timeout
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            reject(new Error('User fetch timeout'));
+          }, 5000); // Reduced from 10s to 5s per attempt
+        });
+        
+        // Create the fetch promise - only select needed columns
+        const fetchPromise = supabase
+          .from('users')
+          .select('id, email, role, first_name, last_name, created_at')
+          .eq('id', userId)
+          .single();
+        
+        // Race between fetch and timeout
+        const { data: userData, error: userError } = await Promise.race([
+          fetchPromise,
+          timeoutPromise.catch(timeoutError => ({ 
+            data: null, 
+            error: timeoutError 
+          }))
+        ]);
+        
+        // Clear timeout on success
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+
+        if (userError) {
+          lastError = userError;
+          if (userError.message === 'User fetch timeout') {
+            console.warn(`AuthStore: User fetch timeout after 5000ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+            if (attempt < maxRetries) continue; // Retry
+          } else {
+            console.warn(`AuthStore: User fetch error: ${userError.message} (attempt ${attempt + 1}/${maxRetries + 1})`);
+            if (attempt < maxRetries) continue; // Retry on other errors too
+          }
+          throw userError;
+        }
+
+        if (!userData) {
+          console.error('AuthStore: No user data returned');
+          useAuthStore.getState().setUser(null);
+          return;
+        }
+
+        console.log('AuthStore: User data fetched successfully');
+
+        const userState: User = {
+          id: userData.id,
+          email: userData.email,
+          role: userData.role,
+          firstName: userData.first_name,
+          lastName: userData.last_name,
+          created_at: userData.created_at
+        };
+
+        console.log('AuthStore: Setting user state');
+        useAuthStore.getState().setUser(userState);
+        return; // Success - exit retry loop
+      } catch (error: any) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          continue; // Try again
+        }
+        // All retries exhausted
+        console.error('AuthStore: Failed to fetch user after', maxRetries + 1, 'attempts:', error.message);
         useAuthStore.getState().setUser(null);
-        return;
+      } finally {
+        // Always cleanup timeout
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
       }
-
-      if (!userData) {
-        console.error('AuthStore: No user data returned');
-        useAuthStore.getState().setUser(null);
-        return;
-      }
-
-      console.log('AuthStore: User data fetched successfully');
-
-      const userState: User = {
-        id: userData.id,
-        email: userData.email,
-        role: userData.role,
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        created_at: userData.created_at
-      };
-
-      console.log('AuthStore: Setting user state');
-      useAuthStore.getState().setUser(userState);
-    } catch (error: any) {
-      if (error.message === 'User fetch timeout') {
-        console.error('AuthStore: User fetch timeout after', timeout, 'ms');
-      } else {
-        console.error('AuthStore: Exception in fetchAndSetUser:', error);
-      }
-      useAuthStore.getState().setUser(null);
-    } finally {
-      // Always cleanup timeout
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-        timeoutHandle = null;
-      }
-      // Clear the promise to allow future fetches
-      fetchUserPromise = null;
     }
+    
+    // Clear the promise to allow future fetches
+    fetchUserPromise = null;
   })();
 
   return fetchUserPromise;
