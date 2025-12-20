@@ -973,7 +973,7 @@ export default function POS() {
                   <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-2 flex items-center justify-center">
                     <Package className="h-10 w-10 text-gray-400" />
                   </div>
-                  <h3 className="font-semibold text-sm line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
+                  <h3 className="font-semibold text-sm line-clamp-2 min-h-[2.5rem] break-words">{product.name}</h3>
                   {!isCustomerRole && (
                     <p className="text-xs text-gray-600 font-medium mt-1">
                       {formatCurrency(product.price)}
@@ -1046,7 +1046,7 @@ export default function POS() {
                       <div key={item.id} className="bg-white border rounded-xl p-4">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1 min-w-0 mr-3">
-                            <h3 className="font-semibold line-clamp-2">{item.name}</h3>
+                            <h3 className="font-semibold line-clamp-2 break-words">{item.name}</h3>
                             <p className="text-sm text-gray-600">{formatCurrency(item.price)} each</p>
                           </div>
                           <button
@@ -1340,7 +1340,7 @@ export default function POS() {
                   <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center text-gray-400">
                     <Package className="h-8 w-8" />
                   </div>
-                  <h3 className="font-medium line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
+                  <h3 className="font-medium line-clamp-2 min-h-[2.5rem] break-words">{product.name}</h3>
                   {!isCustomerRole ? (
                     <p className="text-sm text-gray-600">
                       {formatCurrency(product.price)} - Stock: {product.stock_quantity}
@@ -1528,7 +1528,7 @@ export default function POS() {
                 {cart.map((item) => (
                   <div key={item.id} className="flex items-center justify-between py-2">
                     <div className="flex-1">
-                <h3 className="font-medium line-clamp-2">{item.name}</h3>
+                <h3 className="font-medium line-clamp-2 break-words">{item.name}</h3>
                 <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
                 {canViewQuantities && (
                   <p className="text-xs text-gray-500">Stock: {item.stock_quantity}</p>
