@@ -921,30 +921,34 @@ export default function POS() {
                   </option>
                 ))}
               </select>
-              {/* Customer section on product page */}
-              {selectedCustomer ? (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-blue-900 text-sm truncate">
-                      {selectedCustomer.first_name} {selectedCustomer.last_name}
-                    </p>
-                    <p className="text-xs text-blue-700 truncate">{selectedCustomer.email}</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedCustomer(null)}
-                    className="ml-2 p-2 hover:bg-blue-100 rounded-lg transition-colors touch-manipulation flex-shrink-0"
-                  >
-                    <X className="h-5 w-5 text-blue-600" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowCustomerSearch(true)}
-                  className="w-full p-3 border-2 border-dashed border-gray-300 rounded-xl text-blue-600 font-medium flex items-center justify-center touch-manipulation active:scale-98 transition-transform"
-                >
-                  <UserPlus className="h-5 w-5 mr-2" />
-                  Add Customer (Optional)
-                </button>
+              {/* Customer section on product page - Hidden for customer role */}
+              {!isCustomerRole && (
+                <>
+                  {selectedCustomer ? (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-blue-900 text-sm truncate">
+                          {selectedCustomer.first_name} {selectedCustomer.last_name}
+                        </p>
+                        <p className="text-xs text-blue-700 truncate">{selectedCustomer.email}</p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedCustomer(null)}
+                        className="ml-2 p-2 hover:bg-blue-100 rounded-lg transition-colors touch-manipulation flex-shrink-0"
+                      >
+                        <X className="h-5 w-5 text-blue-600" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowCustomerSearch(true)}
+                      className="w-full p-3 border-2 border-dashed border-gray-300 rounded-xl text-blue-600 font-medium flex items-center justify-center touch-manipulation active:scale-98 transition-transform"
+                    >
+                      <UserPlus className="h-5 w-5 mr-2" />
+                      Add Customer (Optional)
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -969,7 +973,7 @@ export default function POS() {
                   <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-2 flex items-center justify-center">
                     <Package className="h-10 w-10 text-gray-400" />
                   </div>
-                  <h3 className="font-semibold text-sm truncate">{product.name}</h3>
+                  <h3 className="font-semibold text-sm line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
                   {!isCustomerRole && (
                     <p className="text-xs text-gray-600 font-medium mt-1">
                       {formatCurrency(product.price)}
@@ -1042,7 +1046,7 @@ export default function POS() {
                       <div key={item.id} className="bg-white border rounded-xl p-4">
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1 min-w-0 mr-3">
-                            <h3 className="font-semibold truncate">{item.name}</h3>
+                            <h3 className="font-semibold line-clamp-2">{item.name}</h3>
                             <p className="text-sm text-gray-600">{formatCurrency(item.price)} each</p>
                           </div>
                           <button
@@ -1336,7 +1340,7 @@ export default function POS() {
                   <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center text-gray-400">
                     <Package className="h-8 w-8" />
                   </div>
-                  <h3 className="font-medium truncate">{product.name}</h3>
+                  <h3 className="font-medium line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
                   {!isCustomerRole ? (
                     <p className="text-sm text-gray-600">
                       {formatCurrency(product.price)} - Stock: {product.stock_quantity}
@@ -1475,13 +1479,15 @@ export default function POS() {
               <div className="p-4 border-b">
                 <div className="flex justify-between items-center mb-3">
                   <h2 className="text-lg font-medium">Current Sale</h2>
-                  <button
-                    onClick={() => setShowCustomerSearch(true)}
-                    className="flex items-center text-blue-600 hover:text-blue-700 text-sm"
-                  >
-                    <UserPlus className="h-4 w-4 mr-1" />
-                    <span>{selectedCustomer ? 'Change' : 'Add Customer'}</span>
-                  </button>
+                  {!isCustomerRole && (
+                    <button
+                      onClick={() => setShowCustomerSearch(true)}
+                      className="flex items-center text-blue-600 hover:text-blue-700 text-sm"
+                    >
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      <span>{selectedCustomer ? 'Change' : 'Add Customer'}</span>
+                    </button>
+                  )}
                 </div>
                 
                 {isCustomerRole && (
@@ -1499,7 +1505,7 @@ export default function POS() {
                 )}
               </div>
 
-              {selectedCustomer && (
+              {!isCustomerRole && selectedCustomer && (
                 <div className="p-4 bg-blue-50 border-b">
                   <div className="flex justify-between items-center">
                     <div>
@@ -1522,7 +1528,7 @@ export default function POS() {
                 {cart.map((item) => (
                   <div key={item.id} className="flex items-center justify-between py-2">
                     <div className="flex-1">
-                <h3 className="font-medium truncate">{item.name}</h3>
+                <h3 className="font-medium line-clamp-2">{item.name}</h3>
                 <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
                 {canViewQuantities && (
                   <p className="text-xs text-gray-500">Stock: {item.stock_quantity}</p>
