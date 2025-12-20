@@ -12,10 +12,7 @@ export default function Login() {
   const { signIn, user } = useAuthStore();
   const navigate = useNavigate();
 
-  console.log('Login component rendered, user state:', !!user);
-
   if (user) {
-    console.log('User already logged in, redirecting to dashboard');
     return <Navigate to="/" replace />;
   }
 

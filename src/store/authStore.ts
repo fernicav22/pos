@@ -163,11 +163,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       if (authError) throw authError;
-      console.log('AuthStore: Auth successful, fetching user data...');
-
-      if (authData.user) {
-        await fetchAndSetUser(authData.user.id);
-      }
+      
+      // Don't fetch user data here - let onAuthStateChange handle it
+      // This prevents duplicate fetching
+      console.log('AuthStore: Sign in successful, waiting for auth state change...');
     } catch (error) {
       console.error('AuthStore: Sign in error:', error);
       set({ loading: false });
@@ -216,9 +215,23 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event,
   
   // Handle different auth events
   switch (event) {
+    case 'INITIAL_SESSION':
+      // Handle initial session check
+      console.log('AuthStore: Initial session check');
+      if (session?.user) {
+        // Session exists, user is already logged in
+        if (!useAuthStore.getState().user && !isInitializing) {
+          await fetchAndSetUser(session.user.id);
+        }
+      } else {
+        // No session, ensure loading is false
+        useAuthStore.getState().setUser(null);
+      }
+      break;
+      
     case 'SIGNED_IN':
-      // Only fetch user data if not already initializing
-      if (session?.user && !isInitializing) {
+      // Fetch user data on sign in
+      if (session?.user) {
         console.log('AuthStore: SIGNED_IN event, fetching user data');
         await fetchAndSetUser(session.user.id);
       }

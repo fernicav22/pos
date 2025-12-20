@@ -8,6 +8,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { useAuthStore } from '../store/authStore';
 import { hasPermission } from '../utils/permissions';
 import { DraftOrder, DraftOrderItem } from '../types';
+import { roundCurrency, calculateTaxAmount, calculateTotal } from '../utils/currency';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -300,33 +301,54 @@ export default function POS() {
         subtotal: item.price * item.quantity
       }));
 
+      // Calculate values locally for the draft
+      const draftSubtotal = roundCurrency(cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
+      const draftTax = roundCurrency(calculateTax(draftSubtotal));
+      const draftTotal = roundCurrency(draftSubtotal + draftTax + shippingCost);
+
       const draftData = {
         user_id: user.id,
         customer_id: selectedCustomer?.id || null,
         name: draftName || `Draft ${new Date().toLocaleString()}`,
         items: draftItems,
-        subtotal,
-        tax,
-        shipping: shippingCost,
-        total,
+        subtotal: draftSubtotal,
+        tax: draftTax,
+        shipping: roundCurrency(shippingCost),
+        total: draftTotal,
         notes: null
       };
 
       if (currentDraftId) {
-        const { error } = await supabase
+        // Update existing draft and return the updated data
+        const { data, error } = await supabase
           .from('draft_orders')
           .update(draftData)
-          .eq('id', currentDraftId);
+          .eq('id', currentDraftId)
+          .select()
+          .single();
 
         if (error) throw error;
         toast.success('Draft updated');
+        
+        // Update local state with returned data
+        if (data) {
+          setDraftOrders(prev => prev.map(d => d.id === currentDraftId ? data : d));
+        }
       } else {
-        const { error } = await supabase
+        // Insert new draft and return the created data
+        const { data, error } = await supabase
           .from('draft_orders')
-          .insert([draftData]);
+          .insert([draftData])
+          .select()
+          .single();
 
         if (error) throw error;
         toast.success('Draft saved');
+        
+        // Add to local state immediately
+        if (data) {
+          setDraftOrders(prev => [data, ...prev]);
+        }
       }
 
       setShowSaveDraftModal(false);
@@ -451,9 +473,10 @@ export default function POS() {
     ));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = calculateTax(subtotal);
-  const total = subtotal + tax + shippingCost;
+  // Use proper currency rounding to avoid floating point issues
+  const subtotal = roundCurrency(cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
+  const tax = roundCurrency(calculateTax(subtotal));
+  const total = roundCurrency(subtotal + tax + shippingCost);
 
   const handlePayment = async () => {
     // ✅ Use ref-based guard to prevent race conditions (synchronous check)
@@ -753,8 +776,8 @@ export default function POS() {
       )}
 
       {showDraftModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col relative z-[71]">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">Draft Orders</h3>
               <button
@@ -948,6 +971,15 @@ export default function POS() {
                       Add Customer (Optional)
                     </button>
                   )}
+                  
+                  {/* Load Draft Button - Mobile */}
+                  <button
+                    onClick={() => setShowDraftModal(true)}
+                    className="w-full p-3 border-2 border-blue-500 rounded-xl text-blue-600 font-medium flex items-center justify-center touch-manipulation active:scale-98 transition-transform hover:bg-blue-50"
+                  >
+                    <FolderOpen className="h-5 w-5 mr-2" />
+                    Load Draft Order
+                  </button>
                 </>
               )}
             </div>
@@ -1317,6 +1349,16 @@ export default function POS() {
                   </option>
                 ))}
               </select>
+              {/* Load Draft Button - Desktop */}
+              {!isCustomerRole && (
+                <button
+                  onClick={() => setShowDraftModal(true)}
+                  className="px-4 py-2 border-2 border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 flex items-center whitespace-nowrap font-medium transition-colors"
+                >
+                  <FolderOpen className="h-5 w-5 mr-2" />
+                  Load Draft
+                </button>
+              )}
             </div>
           </div>
 
