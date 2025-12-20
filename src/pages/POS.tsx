@@ -114,11 +114,18 @@ export default function POS() {
   // Memoize filtered products to prevent unnecessary recalculations
   const filteredProducts = useMemo(() => {
     if (debouncedSearchQuery.trim()) {
-      const query = debouncedSearchQuery.toLowerCase();
-      return products.filter(product => 
-        product.name.toLowerCase().includes(query) ||
-        product.sku.toLowerCase().includes(query)
-      );
+      // Split search query into individual words and filter out empty strings
+      const searchWords = debouncedSearchQuery.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+      
+      return products.filter(product => {
+        const productName = product.name.toLowerCase();
+        const productSku = product.sku.toLowerCase();
+        
+        // Check if ALL search words exist in either product name or SKU
+        return searchWords.every(word => 
+          productName.includes(word) || productSku.includes(word)
+        );
+      });
     }
     return products;
   }, [debouncedSearchQuery, products]);
