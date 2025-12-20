@@ -19,13 +19,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Test the connection
-supabase.from('users').select('count').then(({ error }) => {
-  if (error) {
-    console.error('Supabase connection test failed:', error);
-  } else {
+// Connection test with timeout (non-blocking, optional)
+const testConnection = async () => {
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Connection test timeout')), 3000);
+    });
+    
+    const testPromise = supabase.from('users').select('count');
+    
+    await Promise.race([testPromise, timeoutPromise]);
     console.log('Supabase connection test successful');
+  } catch (error) {
+    console.debug('Supabase connection test failed (non-blocking):', error);
   }
-}).catch(error => {
-  console.error('Supabase connection test error:', error);
-});
+};
+
+// Run test in background without blocking initialization
+if (typeof window !== 'undefined') {
+  // Use setTimeout to avoid blocking module load
+  setTimeout(() => testConnection(), 100);
+}

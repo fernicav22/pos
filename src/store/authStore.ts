@@ -17,8 +17,8 @@ let isInitialized = false;
 let fetchUserPromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
 
-// Helper function to fetch and set user data with deduplication and retry logic
-const fetchAndSetUser = async (userId: string, maxRetries = 2): Promise<void> => {
+// Helper function to fetch and set user data with deduplication and optimized retry logic
+const fetchAndSetUser = async (userId: string, maxRetries = 1): Promise<void> => {
   // Deduplicate concurrent requests for the same user
   if (fetchUserPromise) {
     console.log('AuthStore: Deduplicating user fetch request');
@@ -33,7 +33,8 @@ const fetchAndSetUser = async (userId: string, maxRetries = 2): Promise<void> =>
       
       try {
         if (attempt > 0) {
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          // Exponential backoff with smaller base: 500ms, 1s, 2s...
+          const delay = Math.min(500 * Math.pow(2, attempt - 1), 3000);
           console.log(`AuthStore: Retry attempt ${attempt}/${maxRetries}, waiting ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -44,7 +45,7 @@ const fetchAndSetUser = async (userId: string, maxRetries = 2): Promise<void> =>
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutHandle = setTimeout(() => {
             reject(new Error('User fetch timeout'));
-          }, 5000); // Reduced from 10s to 5s per attempt
+          }, 3000); // Reduced to 3s for faster timeout detection
         });
         
         // Create the fetch promise - only select needed columns
@@ -72,7 +73,7 @@ const fetchAndSetUser = async (userId: string, maxRetries = 2): Promise<void> =>
         if (userError) {
           lastError = userError;
           if (userError.message === 'User fetch timeout') {
-            console.warn(`AuthStore: User fetch timeout after 5000ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+            console.warn(`AuthStore: User fetch timeout after 3000ms (attempt ${attempt + 1}/${maxRetries + 1})`);
             if (attempt < maxRetries) continue; // Retry
           } else {
             console.warn(`AuthStore: User fetch error: ${userError.message} (attempt ${attempt + 1}/${maxRetries + 1})`);
@@ -231,16 +232,19 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event,
   // Handle different auth events
   switch (event) {
     case 'INITIAL_SESSION':
-      // Handle initial session check
+      // Handle initial session check - only if not already initialized
       console.log('AuthStore: Initial session check');
       if (session?.user) {
         // Session exists, user is already logged in
-        if (!useAuthStore.getState().user && !isInitializing) {
+        // Only fetch if we haven't initialized yet
+        if (isInitialized && !useAuthStore.getState().user) {
           await fetchAndSetUser(session.user.id);
         }
       } else {
         // No session, ensure loading is false
-        useAuthStore.getState().setUser(null);
+        if (isInitialized) {
+          useAuthStore.getState().setUser(null);
+        }
       }
       break;
       
