@@ -713,8 +713,8 @@ export default function POS() {
   return (
     <div className="h-full relative">
       {showSaveDraftModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 relative z-[61]">
             <h3 className="text-lg font-semibold mb-4">Save Draft Order</h3>
             <input
               type="text"
