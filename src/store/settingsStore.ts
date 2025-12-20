@@ -59,10 +59,20 @@ export const useSettingsStore = create<SettingsState>()(
             set({ isLoading: true });
             console.log('SettingsStore: Loading settings from database');
             
-            const { data, error } = await supabase
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('Settings fetch timeout')), 3000);
+            });
+            
+            const fetchPromise = supabase
               .from('store_settings')
               .select('*')
               .limit(1);
+            
+            const { data, error } = await Promise.race([
+              fetchPromise,
+              timeoutPromise.catch(() => ({ data: null, error: new Error('Settings timeout') }))
+            ]) as any;
 
             if (error) throw error;
             

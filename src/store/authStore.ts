@@ -153,7 +153,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (session?.user) {
         console.log('AuthStore: Found existing session');
-        await fetchAndSetUser(session.user.id);
+        // Fire fetch in background but don't wait for it on first load
+        // This allows UI to render faster
+        fetchAndSetUser(session.user.id).catch(error => {
+          console.error('AuthStore: Background user fetch failed:', error);
+        });
+        // Assume user exists and set loading to false immediately
+        set({ loading: false });
       } else {
         console.log('AuthStore: No existing session');
         set({ user: null, loading: false });

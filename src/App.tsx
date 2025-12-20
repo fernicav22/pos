@@ -42,15 +42,16 @@ function App() {
 
   useEffect(() => {
     if (user && !isInitialized) {
+      // Load settings immediately and in parallel with other tasks
       loadSettingsMemo();
       
-      // Timeout protection - if settings don't load in 5 seconds, proceed anyway
+      // Timeout protection - if settings don't load in 3 seconds, proceed anyway
       const timeout = setTimeout(() => {
         if (!isInitialized) {
           console.warn('App: Settings load timeout, proceeding with defaults');
           setSettingsTimeout(true);
         }
-      }, 5000);
+      }, 3000);
       
       return () => clearTimeout(timeout);
     }
@@ -72,27 +73,25 @@ function App() {
     };
   }, []);
 
+  // Show minimal loading only if auth is still loading
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading authentication...</p>
+          <p className="mt-4 text-gray-600">Initializing...</p>
         </div>
       </div>
     );
   }
 
-  // If user is logged in, wait for settings to initialize (with timeout protection)
+  // If user is logged in but settings haven't loaded yet and no timeout,
+  // we can still render the app - settings will be available shortly
+  // Don't block on settings initialization anymore
   if (user && !isInitialized && !settingsTimeout) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading settings...</p>
-        </div>
-      </div>
-    );
+    // Render the app anyway with default settings
+    // Settings will populate once they load
+    console.log('App: User loaded, proceeding with default settings while loading custom settings');
   }
 
   return (

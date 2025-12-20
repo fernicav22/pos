@@ -2,8 +2,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { useAuthStore } from './store/authStore';
 import { Toaster } from 'react-hot-toast';
+
+// Start auth initialization immediately before rendering
+// This gives it a head start while React is mounting
+import { useAuthStore } from './store/authStore';
+useAuthStore.getState().initializeAuth().catch(error => {
+  console.error('Failed to initialize auth:', error);
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
