@@ -79,6 +79,12 @@ export default function Customers() {
 
       if (error) throw error;
 
+      // Optimistic update: add customer to state immediately
+      // No refetch - just append to existing list
+      if (customer) {
+        setCustomers(prev => [customer, ...prev]);
+      }
+
       toast.success('Customer created successfully');
       setShowAddForm(false);
       setFormData({
@@ -87,7 +93,6 @@ export default function Customers() {
         email: '',
         phone: ''
       });
-      fetchCustomers();
     } catch (error: any) {
       console.error('Error creating customer:', error);
       toast.error(error.message || 'Failed to create customer');

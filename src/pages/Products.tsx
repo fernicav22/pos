@@ -170,15 +170,24 @@ export default function Products() {
     }
 
     try {
+      // Optimistic update: remove from state immediately
+      const productToDelete = products.find(p => p.id === productId);
+      setProducts(prev => prev.filter(p => p.id !== productId));
+
       const { error } = await supabase
         .from('products')
         .delete()
         .eq('id', productId);
 
-      if (error) throw error;
+      if (error) {
+        // Rollback on error
+        if (productToDelete) {
+          setProducts(prev => [productToDelete, ...prev]);
+        }
+        throw error;
+      }
 
       toast.success('Product deleted successfully');
-      fetchProducts();
     } catch (error: any) {
       console.error('Error deleting product:', error);
       toast.error(error.message || 'Failed to delete product');
@@ -199,7 +208,7 @@ export default function Products() {
     }
     
     try {
-      const { error } = await supabase
+      const { data: newProduct, error } = await supabase
         .from('products')
         .insert([{
           name: formData.name,
@@ -220,6 +229,16 @@ export default function Products() {
         throw error;
       }
 
+      // Optimistic update: add product to local state immediately
+      // No refetch - just append to existing list
+      if (newProduct) {
+        const product = {
+          ...newProduct,
+          status: getProductStatus(newProduct.stock_quantity, newProduct.low_stock_alert)
+        };
+        setProducts(prev => [product, ...prev]);
+      }
+
       toast.success('Product added successfully');
       setShowAddProduct(false);
       setFormData({
@@ -232,8 +251,6 @@ export default function Products() {
         category: 'Electronics',
         description: ''
       });
-      
-      fetchProducts();
     } catch (error: any) {
       toast.error(error.message || 'Failed to add product');
       console.error('Error adding product:', error);
@@ -246,6 +263,21 @@ export default function Products() {
     if (!selectedProduct) return;
 
     try {
+      // Optimistic update: update state immediately
+      const updatedProduct = {
+        ...selectedProduct,
+        name: formData.name,
+        sku: formData.sku,
+        barcode: formData.barcode || null,
+        description: formData.description || null,
+        price: formData.price,
+        cost: formData.cost,
+        stock_quantity: formData.stockQuantity,
+        status: getProductStatus(formData.stockQuantity, selectedProduct.low_stock_alert)
+      };
+      
+      setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p));
+
       const { error } = await supabase
         .from('products')
         .update({
@@ -259,12 +291,15 @@ export default function Products() {
         })
         .eq('id', selectedProduct.id);
 
-      if (error) throw error;
+      if (error) {
+        // Rollback on error
+        setProducts(prev => prev.map(p => p.id === selectedProduct.id ? selectedProduct : p));
+        throw error;
+      }
 
       toast.success('Product updated successfully');
       setShowEditProduct(false);
       setSelectedProduct(null);
-      fetchProducts();
     } catch (error: any) {
       console.error('Error updating product:', error);
       toast.error(error.message || 'Failed to update product');

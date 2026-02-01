@@ -410,15 +410,24 @@ export default function POS() {
 
   const deleteDraftOrder = async (id: string) => {
     try {
+      // Optimistic update: remove from state immediately
+      const draftToDelete = draftOrders.find(d => d.id === id);
+      setDraftOrders(prev => prev.filter(d => d.id !== id));
+
       const { error } = await supabase
         .from('draft_orders')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        // Rollback on error
+        if (draftToDelete) {
+          setDraftOrders(prev => [draftToDelete, ...prev]);
+        }
+        throw error;
+      }
       
       toast.success('Draft deleted');
-      fetchDraftOrders();
       
       if (currentDraftId === id) {
         setCurrentDraftId(null);

@@ -218,6 +218,17 @@ export default function Purchases() {
 
   const handleReceivePurchase = async (purchase: Purchase) => {
     try {
+      // Optimistic update: update in local state immediately
+      setPurchases(prev => prev.map(p => 
+        p.id === purchase.id 
+          ? { 
+              ...p, 
+              status: 'received' as const,
+              delivery_date: new Date().toISOString()
+            }
+          : p
+      ));
+
       const { error } = await supabase
         .from('purchases')
         .update({
@@ -226,10 +237,15 @@ export default function Purchases() {
         })
         .eq('id', purchase.id);
 
-      if (error) throw error;
+      if (error) {
+        // Rollback on error
+        setPurchases(prev => prev.map(p => 
+          p.id === purchase.id ? purchase : p
+        ));
+        throw error;
+      }
 
       toast.success('Purchase received successfully');
-      fetchPurchases();
     } catch (error) {
       console.error('Error receiving purchase:', error);
       toast.error('Failed to receive purchase');
@@ -280,6 +296,23 @@ export default function Purchases() {
 
       if (itemsError) throw itemsError;
 
+      // Optimistic update: add purchase to state immediately
+      // No refetch - just append to existing list
+      if (purchase) {
+        // Fetch the supplier to include it in the state
+        const { data: supplierData } = await supabase
+          .from('suppliers')
+          .select('*')
+          .eq('id', formData.supplier_id)
+          .single();
+        
+        const newPurchase = {
+          ...purchase,
+          supplier: supplierData || {}
+        };
+        setPurchases(prev => [newPurchase, ...prev]);
+      }
+
       toast.success('Purchase order created successfully');
       setShowAddPurchase(false);
       setFormData({
@@ -291,7 +324,6 @@ export default function Purchases() {
         notes: '',
         items: []
       });
-      fetchPurchases();
     } catch (error: any) {
       console.error('Error creating purchase:', error);
       toast.error(error.message || 'Failed to create purchase');
