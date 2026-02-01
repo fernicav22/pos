@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { useSettingsStore } from '../store/settingsStore';
+import { useAuthStore } from '../store/authStore';
 import { X, Receipt, Search, Mail, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -53,6 +54,7 @@ interface SearchFilters {
 
 function Transactions() {
   const { formatCurrency } = useSettingsStore();
+  const { user } = useAuthStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -172,12 +174,29 @@ function Transactions() {
         .limit(100) // Add pagination limit
         .abortSignal(abortControllerRef.current.signal);
 
-      if (status !== 'all') {
-        query = query.eq('payment_status', status);
-      }
+      // If user is cashier, filter to show only their transactions
+      if (user?.role === 'cashier') {
+        query = query.eq('user_id', user.id);
+        
+        // Also filter to today's date only
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        query = query
+          .gte('created_at', today.toISOString())
+          .lt('created_at', tomorrow.toISOString());
+      } else {
+        // For non-cashier roles, apply the status filter
+        if (status !== 'all') {
+          query = query.eq('payment_status', status);
+        }
 
-      if (startDate) {
-        query = query.gte('created_at', startDate);
+        // Apply date filter if provided
+        if (startDate) {
+          query = query.gte('created_at', startDate);
+        }
       }
 
       const { data, error } = await query;
