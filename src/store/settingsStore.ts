@@ -3,6 +3,54 @@ import { persist } from 'zustand/middleware';
 import defaultSettings from '../config/settings.json';
 import { supabase } from '../lib/supabase';
 
+// Define defaults for numeric fields to prevent NaN
+const NUMERIC_DEFAULTS = {
+  tax_rate: 10,
+  low_stock_threshold: 10,
+  outOfStockThreshold: 0,
+} as const;
+
+// Sanitize settings to remove NaN and null values from numeric fields
+const sanitizeSettings = (rawSettings: any) => {
+  if (!rawSettings) return null;
+
+  // Helper function to safely convert to number
+  const toNumber = (value: any, defaultVal: number): number => {
+    const num = Number(value);
+    return isNaN(num) || num === null || num === undefined ? defaultVal : num;
+  };
+
+  return {
+    store: {
+      name: rawSettings.store_name || defaultSettings.store.name,
+      address: rawSettings.store_address || defaultSettings.store.address,
+      phone: rawSettings.store_phone || '',
+      email: rawSettings.store_email || '',
+      website: rawSettings.store_website || ''
+    },
+    tax: {
+      rate: toNumber(rawSettings.tax_rate, defaultSettings.tax.rate),
+      inclusive: rawSettings.tax_inclusive === true || rawSettings.tax_inclusive === 'true'
+    },
+    currency: {
+      code: rawSettings.currency || defaultSettings.currency.code,
+      symbol: rawSettings.currency === 'USD' ? '$' : rawSettings.currency || defaultSettings.currency.symbol,
+      position: 'before' as const
+    },
+    inventory: {
+      lowStockThreshold: toNumber(rawSettings.low_stock_threshold, defaultSettings.inventory.lowStockThreshold),
+      outOfStockThreshold: toNumber(rawSettings.out_of_stock_threshold, defaultSettings.inventory.outOfStockThreshold),
+      enableStockTracking: rawSettings.enable_stock_tracking !== false && rawSettings.enable_stock_tracking !== 'false'
+    },
+    receipt: {
+      header: rawSettings.receipt_header || defaultSettings.receipt.header,
+      footer: rawSettings.receipt_footer || defaultSettings.receipt.footer,
+      showTaxDetails: rawSettings.show_tax_details !== false && rawSettings.show_tax_details !== 'false',
+      showItemizedList: rawSettings.show_itemized_list !== false && rawSettings.show_itemized_list !== 'false'
+    }
+  };
+};
+
 interface SettingsState {
   settings: typeof defaultSettings;
   isLoading: boolean;
@@ -80,38 +128,19 @@ export const useSettingsStore = create<SettingsState>()(
             const settingsRecord = data && data.length > 0 ? data[0] : null;
 
             if (settingsRecord) {
-              // Map database fields to settings structure
-              const loadedSettings = {
-                store: {
-                  name: settingsRecord.store_name,
-                  address: settingsRecord.store_address,
-                  phone: settingsRecord.store_phone || '',
-                  email: settingsRecord.store_email || '',
-                  website: settingsRecord.store_website || ''
-                },
-                tax: {
-                  rate: Number(settingsRecord.tax_rate),
-                  inclusive: settingsRecord.tax_inclusive || false
-                },
-                currency: {
-                  code: settingsRecord.currency,
-                  symbol: settingsRecord.currency === 'USD' ? '$' : settingsRecord.currency,
-                  position: 'before' as const
-                },
-                inventory: {
-                  lowStockThreshold: settingsRecord.low_stock_threshold || 5,
-                  outOfStockThreshold: 0,
-                  enableStockTracking: settingsRecord.enable_stock_tracking !== false
-                },
-                receipt: {
-                  header: settingsRecord.receipt_header || '',
-                  footer: settingsRecord.receipt_footer || '',
-                  showTaxDetails: settingsRecord.show_tax_details !== false,
-                  showItemizedList: settingsRecord.show_itemized_list !== false
-                }
-              };
+              console.log('SettingsStore: Raw settings from DB:', settingsRecord);
+              
+              // Sanitize the settings to remove NaN and null values
+              const loadedSettings = sanitizeSettings(settingsRecord);
+              
+              if (!loadedSettings) {
+                set({ isLoading: false, isInitialized: true });
+                console.log('SettingsStore: Settings sanitization failed, using defaults');
+                return;
+              }
+              
               set({ settings: loadedSettings, isLoading: false, isInitialized: true });
-              console.log('SettingsStore: Settings loaded successfully');
+              console.log('SettingsStore: Settings loaded successfully:', loadedSettings);
             } else {
               set({ isLoading: false, isInitialized: true });
               console.log('SettingsStore: No settings found, using defaults');

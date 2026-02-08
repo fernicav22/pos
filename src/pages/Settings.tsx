@@ -41,12 +41,32 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
+  // Helper to safely handle numeric values - prevents NaN from appearing in inputs
+  const getSafeNumericValue = (value: any, defaultValue: number = 0): number => {
+    const num = Number(value);
+    return isNaN(num) || num === null || num === undefined ? defaultValue : num;
+  };
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
   useEffect(() => {
-    setFormData(settings as SettingsFormData);
+    // Ensure numeric values are safe when settings load
+    const safeSettings = {
+      ...settings,
+      tax: {
+        ...settings.tax,
+        rate: getSafeNumericValue(settings.tax.rate, 10)
+      },
+      inventory: {
+        ...settings.inventory,
+        lowStockThreshold: getSafeNumericValue(settings.inventory.lowStockThreshold, 10),
+        outOfStockThreshold: getSafeNumericValue(settings.inventory.outOfStockThreshold, 0)
+      }
+    } as SettingsFormData;
+    
+    setFormData(safeSettings);
   }, [settings]);
 
   if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
@@ -64,11 +84,17 @@ export default function Settings() {
     field: string,
     value: string | number | boolean
   ) => {
+    // If it's a numeric field, ensure it's not NaN
+    let safeValue = value;
+    if (typeof value === 'number') {
+      safeValue = getSafeNumericValue(value, 0);
+    }
+    
     setFormData((prev) => ({
       ...prev,
       [section]: {
         ...prev[section],
-        [field]: value,
+        [field]: safeValue,
       },
     }));
   };
