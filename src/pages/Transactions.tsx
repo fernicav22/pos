@@ -301,7 +301,7 @@ function Transactions() {
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: isMobile ? [80, 297] : 'a4', // Use thermal receipt width for mobile, A4 for desktop
+        format: [58, 297], // Use 58mm thermal receipt width
         compress: true
       });
 
@@ -635,7 +635,6 @@ function Transactions() {
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
-                            <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-xs">
@@ -680,9 +679,6 @@ function Transactions() {
                           <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Product
                           </th>
-                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            SKU
-                          </th>
                           <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Quantity
                           </th>
@@ -700,9 +696,6 @@ function Transactions() {
                             <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900">
                               {item.product.name}
                             </td>
-                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500">
-                              {item.product.sku}
-                            </td>
                             <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
                               {item.quantity}
                             </td>
@@ -717,7 +710,7 @@ function Transactions() {
                       </tbody>
                       <tfoot>
                         <tr>
-                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
+                          <td colSpan={3} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
                             Subtotal
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
@@ -725,7 +718,7 @@ function Transactions() {
                           </td>
                         </tr>
                         <tr>
-                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
+                          <td colSpan={3} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-500 text-right">
                             Tax
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-gray-900 text-right">
@@ -733,7 +726,7 @@ function Transactions() {
                           </td>
                         </tr>
                         <tr className="border-t border-gray-200">
-                          <td colSpan={4} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-gray-900 text-right">
+                          <td colSpan={3} className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-gray-900 text-right">
                             Total
                           </td>
                           <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-gray-900 text-right">
