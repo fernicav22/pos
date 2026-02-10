@@ -505,6 +505,9 @@ export default function POS() {
   const tax = roundCurrency(calculateTax(subtotal));
   const total = roundCurrency(subtotal + tax + shippingCost);
 
+  // Check if paymentMethod is valid (not the 'selecting' placeholder)
+  const isValidPaymentMethod = ['cash', 'card', 'split'].includes(paymentMethod);
+
   const handlePaymentClick = () => {
     // This wrapper is called by the debounced handler
     handlePayment();
@@ -518,8 +521,8 @@ export default function POS() {
     }
 
     try {
-      if (!paymentMethod) {
-        toast.error('Please select a payment method');
+      if (!isValidPaymentMethod) {
+        toast.error('Please select a valid payment method');
         return;
       }
 
@@ -1342,7 +1345,7 @@ export default function POS() {
                       e.stopPropagation();
                     }}
                     style={{ touchAction: 'manipulation' }}
-                    disabled={isProcessing}
+                    disabled={!isValidPaymentMethod || isProcessing}
                     className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-4 rounded-xl font-semibold text-lg touch-manipulation active:scale-98 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
                     {isProcessing ? (
@@ -1573,7 +1576,7 @@ export default function POS() {
                     e.stopPropagation();
                   }}
                   style={{ touchAction: 'manipulation' }}
-                  disabled={!paymentMethod || isProcessing}
+                  disabled={!isValidPaymentMethod || isProcessing}
                   className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center touch-manipulation transition-all"
                 >
                   {isProcessing ? (
