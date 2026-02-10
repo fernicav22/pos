@@ -298,19 +298,19 @@ function Transactions() {
     
     // Header
     if (storeName) {
-      receipt += storeName.substring(0, lines).padStart((lines + storeName.length) / 2).padEnd(lines) + '\n';
+      receipt += storeName.substring(0, lines) + '\n';
     }
     if (storeAddress) {
-      receipt += storeAddress.substring(0, lines).padStart((lines + storeAddress.length) / 2).padEnd(lines) + '\n';
+      receipt += storeAddress.substring(0, lines) + '\n';
     }
     if (storePhone) {
-      receipt += storePhone.substring(0, lines).padStart((lines + storePhone.length) / 2).padEnd(lines) + '\n';
+      receipt += storePhone.substring(0, lines) + '\n';
     }
     receipt += '-'.repeat(lines) + '\n\n';
     
     // Receipt header from settings
     if (receiptHeader) {
-      receipt += receiptHeader.substring(0, lines).padStart((lines + receiptHeader.length) / 2).padEnd(lines) + '\n\n';
+      receipt += receiptHeader.substring(0, lines) + '\n\n';
     }
     
     // Transaction info
@@ -358,7 +358,7 @@ function Transactions() {
     
     // Footer from settings
     if (receiptFooter) {
-      receipt += '\n' + receiptFooter.substring(0, lines).padStart((lines + receiptFooter.length) / 2).padEnd(lines) + '\n';
+      receipt += '\n' + receiptFooter.substring(0, lines) + '\n';
     }
     
     receipt += '\nThank you for your purchase!\n';
