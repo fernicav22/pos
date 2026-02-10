@@ -4,8 +4,6 @@ import toast from 'react-hot-toast';
 import { useSettingsStore } from '../store/settingsStore';
 import { useAuthStore } from '../store/authStore';
 import { X, Receipt, Search, Mail, Printer } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface Transaction {
   id: string;
@@ -279,60 +277,86 @@ function Transactions() {
     }
   };
 
-  const generatePDF = async () => {
-    if (!receiptRef.current) return;
+  const generateTextReceipt = () => {
+    if (!selectedTransaction) return '';
 
-    try {
-      // Detect if we're on mobile
-      const isMobile = window.innerWidth < 768;
-      
-      // Configure html2canvas with better settings for mobile
-      const canvas = await html2canvas(receiptRef.current, {
-        scale: isMobile ? 2 : 3, // Higher scale for better quality, but lower on mobile to prevent memory issues
-        useCORS: true,
-        logging: false,
-        windowWidth: isMobile ? receiptRef.current.scrollWidth : undefined,
-        windowHeight: isMobile ? receiptRef.current.scrollHeight : undefined
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      
-      // Adjust PDF format based on device
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [58, 297], // Use 58mm thermal receipt width
-        compress: true
-      });
-
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      // Add padding for mobile
-      const padding = isMobile ? 2 : 0;
-
-      pdf.addImage(imgData, 'PNG', padding, padding, pdfWidth - (padding * 2), pdfHeight);
-      return pdf;
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      throw error;
+    const settings = useSettingsStore.getState();
+    const lines = 58; // Max characters for 58mm thermal printer
+    
+    let receipt = '';
+    
+    // Header
+    receipt += settings.store.name.padStart((lines + settings.store.name.length) / 2).padEnd(lines) + '\n';
+    receipt += settings.store.address.padStart((lines + settings.store.address.length) / 2).padEnd(lines) + '\n';
+    receipt += settings.store.phone.padStart((lines + settings.store.phone.length) / 2).padEnd(lines) + '\n';
+    receipt += '-'.repeat(lines) + '\n\n';
+    
+    // Receipt header from settings
+    if (settings.receipt.header) {
+      receipt += settings.receipt.header.padStart((lines + settings.receipt.header.length) / 2).padEnd(lines) + '\n\n';
     }
+    
+    // Transaction info
+    receipt += 'TRANSACTION ID: ' + selectedTransaction.id + '\n';
+    receipt += 'DATE: ' + formatDate(selectedTransaction.created_at) + '\n';
+    receipt += 'CASHIER: ' + (selectedTransaction.user ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}` : 'Unknown') + '\n';
+    receipt += 'CUSTOMER: ' + (selectedTransaction.customer ? `${selectedTransaction.customer.first_name} ${selectedTransaction.customer.last_name}` : 'Walk-in') + '\n';
+    receipt += '-'.repeat(lines) + '\n\n';
+    
+    // Items header
+    const itemHeaderFormat = 'ITEM'.padEnd(30) + 'QTY'.padEnd(8) + 'TOTAL'.padEnd(20);
+    receipt += itemHeaderFormat + '\n';
+    receipt += '-'.repeat(lines) + '\n';
+    
+    // Items
+    selectedTransaction.items.forEach((item) => {
+      const price = formatCurrency(item.subtotal);
+      const itemLine = item.product.name.substring(0, 30).padEnd(30) + 
+                       String(item.quantity).padEnd(8) + 
+                       price.padStart(19) + '\n';
+      receipt += itemLine;
+    });
+    
+    receipt += '-'.repeat(lines) + '\n';
+    
+    // Totals
+    const subtotal = formatCurrency(selectedTransaction.subtotal);
+    const tax = formatCurrency(selectedTransaction.tax);
+    const total = formatCurrency(selectedTransaction.total);
+    
+    receipt += 'Subtotal'.padEnd(lines - subtotal.length) + subtotal + '\n';
+    receipt += 'Tax'.padEnd(lines - tax.length) + tax + '\n';
+    receipt += 'TOTAL'.padEnd(lines - total.length) + total + '\n';
+    receipt += '='.repeat(lines) + '\n\n';
+    
+    // Payment method
+    receipt += 'Payment Method: ' + selectedTransaction.payment_method.toUpperCase() + '\n';
+    receipt += 'Status: ' + selectedTransaction.payment_status.replace('_', ' ').toUpperCase() + '\n';
+    receipt += '\n' + '-'.repeat(lines) + '\n';
+    
+    // Footer from settings
+    if (settings.receipt.footer) {
+      receipt += '\n' + settings.receipt.footer.padStart((lines + settings.receipt.footer.length) / 2).padEnd(lines) + '\n';
+    }
+    
+    receipt += '\nThank you for your purchase!\n';
+    
+    return receipt;
   };
 
   const handleEmailReceipt = async () => {
     if (!selectedTransaction) return;
 
     try {
-      const pdf = await generatePDF();
-      if (!pdf) {
-        throw new Error('Failed to generate PDF');
+      const receiptText = generateTextReceipt();
+      if (!receiptText) {
+        throw new Error('Failed to generate receipt');
       }
       
-      const pdfBlob = pdf.output('blob');
+      const blob = new Blob([receiptText], { type: 'text/plain' });
       
       const formData = new FormData();
-      formData.append('pdf', pdfBlob, 'receipt.pdf');
+      formData.append('text', receiptText);
       formData.append('to', selectedTransaction.customer?.email || '');
       formData.append('transactionId', selectedTransaction.id);
 
@@ -347,13 +371,19 @@ function Transactions() {
     if (!selectedTransaction) return;
 
     try {
-      const pdf = await generatePDF();
-      if (!pdf) {
-        throw new Error('Failed to generate PDF');
+      const receiptText = generateTextReceipt();
+      if (!receiptText) {
+        throw new Error('Failed to generate receipt');
       }
       
-      pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        throw new Error('Could not open print window');
+      }
+      
+      printWindow.document.write('<pre style="font-family: monospace; font-size: 10pt;">' + receiptText.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>');
+      printWindow.document.close();
+      printWindow.print();
     } catch (error) {
       console.error('Error printing:', error);
       toast.error('Failed to print receipt');
