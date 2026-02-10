@@ -9,8 +9,6 @@ import { useAuthStore } from '../store/authStore';
 import { hasPermission } from '../utils/permissions';
 import { DraftOrder, DraftOrderItem } from '../types';
 import { roundCurrency, calculateTaxAmount, calculateTotal } from '../utils/currency';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface Product {
   id: string;
@@ -650,97 +648,124 @@ export default function POS() {
     });
   };
 
-  const generatePDF = async () => {
-    if (!receiptRef.current) return null;
+  const generateTextReceipt = () => {
+    if (!completedSale) return '';
 
-    let canvas: HTMLCanvasElement | null = null;
-    let pdf: jsPDF | null = null;
+    const storeState = useSettingsStore.getState();
+    const settingsData = storeState.settings;
+    const lines = 58; // Max characters for 58mm thermal printer
     
-    try {
-      const isMobile = window.innerWidth < 768;
-      
-      // Create canvas with lower scale for mobile to prevent memory issues
-      canvas = await html2canvas(receiptRef.current, {
-        scale: isMobile ? 1.5 : 2, // Reduced scale
-        useCORS: true,
-        logging: false,
-        windowWidth: receiptRef.current.scrollWidth,
-        windowHeight: receiptRef.current.scrollHeight,
-        onclone: (clonedDoc) => {
-          // Clean up cloned document references
-          clonedDoc.querySelectorAll('script').forEach(s => s.remove());
+    let receipt = '';
+    
+    // SAFER header values with explicit checks
+    const storeSettings = settingsData?.store || {};
+    const receiptSettings = settingsData?.receipt || {};
+    
+    const storeName = storeSettings.name || 'Modern POS';
+    const storeAddress = storeSettings.address || '';
+    const storePhone = storeSettings.phone || '';
+    const receiptHeader = receiptSettings.header || '';
+    const receiptFooter = receiptSettings.footer || '';
+    
+    // Header
+    if (storeName) {
+      receipt += storeName.substring(0, lines) + '\n';
+    }
+    if (storeAddress) {
+      receipt += storeAddress.substring(0, lines) + '\n';
+    }
+    if (storePhone) {
+      receipt += storePhone.substring(0, lines) + '\n';
+    }
+    receipt += '-'.repeat(lines) + '\n\n';
+    
+    // Receipt header from settings
+    if (receiptHeader) {
+      receipt += receiptHeader.substring(0, lines) + '\n\n';
+    }
+    
+    // Transaction info
+    receipt += 'TRANSACTION ID: ' + (completedSale?.id || '') + '\n';
+    receipt += 'DATE: ' + formatDate(completedSale?.created_at || new Date().toISOString()) + '\n';
+    receipt += 'CASHIER: ' + (completedSale?.user ? `${completedSale.user.first_name} ${completedSale.user.last_name}` : 'Unknown') + '\n';
+    receipt += 'CUSTOMER: ' + (completedSale?.customer ? `${completedSale.customer.first_name} ${completedSale.customer.last_name}` : 'Walk-in') + '\n';
+    receipt += '-'.repeat(lines) + '\n\n';
+    
+    // Items header
+    const itemHeaderFormat = 'ITEM'.padEnd(30) + 'QTY'.padEnd(8) + 'TOTAL'.padEnd(20);
+    receipt += itemHeaderFormat + '\n';
+    receipt += '-'.repeat(lines) + '\n';
+    
+    // Items
+    if (completedSale?.items && Array.isArray(completedSale.items)) {
+      completedSale.items.forEach((item) => {
+        if (item?.product?.name) {
+          const price = formatCurrency(item?.subtotal || 0);
+          const itemName = item.product.name;
+          const itemLine = itemName.substring(0, 30).padEnd(30) + 
+                           String(item?.quantity || 0).padEnd(8) + 
+                           price.padStart(19) + '\n';
+          receipt += itemLine;
         }
       });
-      
-      // Immediately convert to data URL and release canvas
-      const imgData = canvas.toDataURL('image/png', 0.8); // Reduced quality for smaller size
-      
-      // Clear canvas immediately after getting data
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-      canvas.width = 1;
-      canvas.height = 1;
-      
-      // Create PDF with compression
-      pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: isMobile ? [80, 297] : 'a4',
-        compress: true,
-        putOnlyUsedFonts: true
-      });
-
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      const padding = isMobile ? 2 : 0;
-      pdf.addImage(
-        imgData, 
-        'PNG', 
-        padding, 
-        padding, 
-        pdfWidth - (padding * 2), 
-        pdfHeight,
-        undefined,
-        'FAST' // Use fast compression
-      );
-      
-      return pdf;
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      if (pdf) {
-        pdf = null;
-      }
-      throw error;
-    } finally {
-      // Ensure canvas is always cleaned up
-      if (canvas) {
-        canvas.remove?.(); // Remove from DOM if attached
-        canvas = null;
-      }
-      // Force garbage collection hint
-      if (typeof (window as any).gc === 'function') {
-        (window as any).gc();
-      }
     }
+    
+    receipt += '-'.repeat(lines) + '\n';
+    
+    // Totals
+    const subtotal = formatCurrency(completedSale?.subtotal || 0);
+    const tax = formatCurrency(completedSale?.tax || 0);
+    const total = formatCurrency(completedSale?.total || 0);
+    
+    receipt += 'Subtotal'.padEnd(lines - subtotal.length) + subtotal + '\n';
+    receipt += 'Tax'.padEnd(lines - tax.length) + tax + '\n';
+    
+    // Add shipping if applicable
+    if (completedSale?.shipping && completedSale.shipping > 0) {
+      const shipping = formatCurrency(completedSale.shipping);
+      receipt += 'Shipping'.padEnd(lines - shipping.length) + shipping + '\n';
+    }
+    
+    receipt += 'TOTAL'.padEnd(lines - total.length) + total + '\n';
+    receipt += '='.repeat(lines) + '\n\n';
+    
+    // Payment method
+    receipt += 'Payment Method: ' + (completedSale?.payment_method?.toUpperCase() || 'UNKNOWN') + '\n';
+    receipt += 'Status: ' + (completedSale?.payment_status?.replace('_', ' ').toUpperCase() || 'UNKNOWN') + '\n';
+    receipt += '\n' + '-'.repeat(lines) + '\n';
+    
+    // Footer from settings
+    if (receiptFooter) {
+      receipt += '\n' + receiptFooter.substring(0, lines) + '\n';
+    }
+    
+    receipt += '\nThank you for your purchase!\n';
+    
+    return receipt;
   };
 
   const handleEmailReceipt = async () => {
     if (!completedSale) return;
 
     try {
-      const pdf = await generatePDF();
-      if (!pdf) {
-        throw new Error('Failed to generate PDF');
+      const receiptText = generateTextReceipt();
+      if (!receiptText) {
+        throw new Error('Failed to generate receipt');
       }
       
-      toast.success('Email sent successfully!');
+      // Create a downloadable text file
+      const element = document.createElement('a');
+      const file = new Blob([receiptText], { type: 'text/plain' });
+      element.href = URL.createObjectURL(file);
+      element.download = `receipt-${completedSale.id}.txt`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+
+      toast.success('Receipt downloaded as text file!');
     } catch (error) {
-      console.error('Error sending email:', error);
-      toast.error('Failed to send email');
+      console.error('Error:', error);
+      toast.error('Failed to download receipt');
     }
   };
 
@@ -748,15 +773,29 @@ export default function POS() {
     if (!completedSale) return;
 
     try {
-      const pdf = await generatePDF();
-      if (!pdf) {
-        throw new Error('Failed to generate PDF');
+      const receiptText = generateTextReceipt();
+      if (!receiptText) {
+        throw new Error('Failed to generate receipt');
       }
       
-      (pdf as jsPDF).autoPrint();
-      window.open((pdf as jsPDF).output('bloburl'), '_blank');
+      // Open in new window and print (works with thermal printer drivers)
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write('<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap; margin: 0; padding: 10px;">');
+        printWindow.document.write(receiptText);
+        printWindow.document.write('</pre>');
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Small delay to ensure content is rendered before printing
+        setTimeout(() => {
+          printWindow.print();
+        }, 250);
+        
+        toast.success('Receipt opened - use Ctrl+P to print');
+      }
     } catch (error) {
-      console.error('Error printing:', error);
+      console.error('Error:', error);
       toast.error('Failed to print receipt');
     }
   };
