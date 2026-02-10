@@ -400,22 +400,25 @@ function Transactions() {
         throw new Error('Failed to generate receipt');
       }
       
-      // For thermal printer - copy to clipboard and send raw text
-      await navigator.clipboard.writeText(receiptText);
-      
-      // Create and download as .txt file for thermal printer
-      const element = document.createElement('a');
-      const file = new Blob([receiptText], { type: 'text/plain' });
-      element.href = URL.createObjectURL(file);
-      element.download = `receipt-${selectedTransaction.id}.txt`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-      
-      toast.success('Receipt copied to clipboard and downloaded as .txt file');
+      // Open in new window and print (works with thermal printer drivers)
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write('<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap; margin: 0; padding: 10px;">');
+        printWindow.document.write(receiptText);
+        printWindow.document.write('</pre>');
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Small delay to ensure content is rendered before printing
+        setTimeout(() => {
+          printWindow.print();
+        }, 250);
+        
+        toast.success('Receipt opened - use Ctrl+P to print');
+      }
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Failed to process receipt');
+      toast.error('Failed to print receipt');
     }
   };
 
