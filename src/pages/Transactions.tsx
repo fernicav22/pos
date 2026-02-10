@@ -353,17 +353,19 @@ function Transactions() {
         throw new Error('Failed to generate receipt');
       }
       
-      const blob = new Blob([receiptText], { type: 'text/plain' });
-      
-      const formData = new FormData();
-      formData.append('text', receiptText);
-      formData.append('to', selectedTransaction.customer?.email || '');
-      formData.append('transactionId', selectedTransaction.id);
+      // Create a downloadable text file
+      const element = document.createElement('a');
+      const file = new Blob([receiptText], { type: 'text/plain' });
+      element.href = URL.createObjectURL(file);
+      element.download = `receipt-${selectedTransaction.id}.txt`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
 
-      toast.success('Email sent successfully!');
+      toast.success('Receipt downloaded as text file!');
     } catch (error) {
-      console.error('Error sending email:', error);
-      toast.error('Failed to send email');
+      console.error('Error:', error);
+      toast.error('Failed to download receipt');
     }
   };
 
@@ -376,17 +378,22 @@ function Transactions() {
         throw new Error('Failed to generate receipt');
       }
       
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        throw new Error('Could not open print window');
-      }
+      // For thermal printer - copy to clipboard and send raw text
+      await navigator.clipboard.writeText(receiptText);
       
-      printWindow.document.write('<pre style="font-family: monospace; font-size: 10pt;">' + receiptText.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>');
-      printWindow.document.close();
-      printWindow.print();
+      // Create and download as .txt file for thermal printer
+      const element = document.createElement('a');
+      const file = new Blob([receiptText], { type: 'text/plain' });
+      element.href = URL.createObjectURL(file);
+      element.download = `receipt-${selectedTransaction.id}.txt`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      
+      toast.success('Receipt copied to clipboard and downloaded as .txt file');
     } catch (error) {
-      console.error('Error printing:', error);
-      toast.error('Failed to print receipt');
+      console.error('Error:', error);
+      toast.error('Failed to process receipt');
     }
   };
 
