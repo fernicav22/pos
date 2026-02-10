@@ -280,27 +280,44 @@ function Transactions() {
   const generateTextReceipt = () => {
     if (!selectedTransaction) return '';
 
-    const settings = useSettingsStore.getState();
+    const storeState = useSettingsStore.getState();
+    const settings = storeState.settings;
     const lines = 58; // Max characters for 58mm thermal printer
     
     let receipt = '';
     
+    // SAFER header values with explicit checks
+    const storeSettings = settings?.store || {};
+    const receiptSettings = settings?.receipt || {};
+    
+    const storeName = storeSettings.name || 'Modern POS';
+    const storeAddress = storeSettings.address || '';
+    const storePhone = storeSettings.phone || '';
+    const receiptHeader = receiptSettings.header || '';
+    const receiptFooter = receiptSettings.footer || '';
+    
     // Header
-    receipt += settings.store.name.padStart((lines + settings.store.name.length) / 2).padEnd(lines) + '\n';
-    receipt += settings.store.address.padStart((lines + settings.store.address.length) / 2).padEnd(lines) + '\n';
-    receipt += settings.store.phone.padStart((lines + settings.store.phone.length) / 2).padEnd(lines) + '\n';
+    if (storeName) {
+      receipt += storeName.substring(0, lines).padStart((lines + storeName.length) / 2).padEnd(lines) + '\n';
+    }
+    if (storeAddress) {
+      receipt += storeAddress.substring(0, lines).padStart((lines + storeAddress.length) / 2).padEnd(lines) + '\n';
+    }
+    if (storePhone) {
+      receipt += storePhone.substring(0, lines).padStart((lines + storePhone.length) / 2).padEnd(lines) + '\n';
+    }
     receipt += '-'.repeat(lines) + '\n\n';
     
     // Receipt header from settings
-    if (settings.receipt.header) {
-      receipt += settings.receipt.header.padStart((lines + settings.receipt.header.length) / 2).padEnd(lines) + '\n\n';
+    if (receiptHeader) {
+      receipt += receiptHeader.substring(0, lines).padStart((lines + receiptHeader.length) / 2).padEnd(lines) + '\n\n';
     }
     
     // Transaction info
-    receipt += 'TRANSACTION ID: ' + selectedTransaction.id + '\n';
-    receipt += 'DATE: ' + formatDate(selectedTransaction.created_at) + '\n';
-    receipt += 'CASHIER: ' + (selectedTransaction.user ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}` : 'Unknown') + '\n';
-    receipt += 'CUSTOMER: ' + (selectedTransaction.customer ? `${selectedTransaction.customer.first_name} ${selectedTransaction.customer.last_name}` : 'Walk-in') + '\n';
+    receipt += 'TRANSACTION ID: ' + (selectedTransaction?.id || '') + '\n';
+    receipt += 'DATE: ' + formatDate(selectedTransaction?.created_at || new Date().toISOString()) + '\n';
+    receipt += 'CASHIER: ' + (selectedTransaction?.user ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}` : 'Unknown') + '\n';
+    receipt += 'CUSTOMER: ' + (selectedTransaction?.customer ? `${selectedTransaction.customer.first_name} ${selectedTransaction.customer.last_name}` : 'Walk-in') + '\n';
     receipt += '-'.repeat(lines) + '\n\n';
     
     // Items header
@@ -309,20 +326,25 @@ function Transactions() {
     receipt += '-'.repeat(lines) + '\n';
     
     // Items
-    selectedTransaction.items.forEach((item) => {
-      const price = formatCurrency(item.subtotal);
-      const itemLine = item.product.name.substring(0, 30).padEnd(30) + 
-                       String(item.quantity).padEnd(8) + 
-                       price.padStart(19) + '\n';
-      receipt += itemLine;
-    });
+    if (selectedTransaction?.items && Array.isArray(selectedTransaction.items)) {
+      selectedTransaction.items.forEach((item) => {
+        if (item?.product?.name) {
+          const price = formatCurrency(item?.subtotal || 0);
+          const itemName = item.product.name;
+          const itemLine = itemName.substring(0, 30).padEnd(30) + 
+                           String(item?.quantity || 0).padEnd(8) + 
+                           price.padStart(19) + '\n';
+          receipt += itemLine;
+        }
+      });
+    }
     
     receipt += '-'.repeat(lines) + '\n';
     
     // Totals
-    const subtotal = formatCurrency(selectedTransaction.subtotal);
-    const tax = formatCurrency(selectedTransaction.tax);
-    const total = formatCurrency(selectedTransaction.total);
+    const subtotal = formatCurrency(selectedTransaction?.subtotal || 0);
+    const tax = formatCurrency(selectedTransaction?.tax || 0);
+    const total = formatCurrency(selectedTransaction?.total || 0);
     
     receipt += 'Subtotal'.padEnd(lines - subtotal.length) + subtotal + '\n';
     receipt += 'Tax'.padEnd(lines - tax.length) + tax + '\n';
@@ -330,13 +352,13 @@ function Transactions() {
     receipt += '='.repeat(lines) + '\n\n';
     
     // Payment method
-    receipt += 'Payment Method: ' + selectedTransaction.payment_method.toUpperCase() + '\n';
-    receipt += 'Status: ' + selectedTransaction.payment_status.replace('_', ' ').toUpperCase() + '\n';
+    receipt += 'Payment Method: ' + (selectedTransaction?.payment_method?.toUpperCase() || 'UNKNOWN') + '\n';
+    receipt += 'Status: ' + (selectedTransaction?.payment_status?.replace('_', ' ').toUpperCase() || 'UNKNOWN') + '\n';
     receipt += '\n' + '-'.repeat(lines) + '\n';
     
     // Footer from settings
-    if (settings.receipt.footer) {
-      receipt += '\n' + settings.receipt.footer.padStart((lines + settings.receipt.footer.length) / 2).padEnd(lines) + '\n';
+    if (receiptFooter) {
+      receipt += '\n' + receiptFooter.substring(0, lines).padStart((lines + receiptFooter.length) / 2).padEnd(lines) + '\n';
     }
     
     receipt += '\nThank you for your purchase!\n';
