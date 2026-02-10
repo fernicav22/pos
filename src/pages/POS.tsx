@@ -7,7 +7,6 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useDebounce } from '../hooks/useDebounce';
 import { useAuthStore } from '../store/authStore';
 import { hasPermission } from '../utils/permissions';
-import { debounce } from '../utils/memoryOptimization';
 import { DraftOrder, DraftOrderItem } from '../types';
 import { roundCurrency, calculateTaxAmount, calculateTotal } from '../utils/currency';
 import jsPDF from 'jspdf';
@@ -109,22 +108,6 @@ export default function POS() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const isProcessingRef = useRef(false);  // ✅ Use ref for synchronous state check
   const lastPaymentClickRef = useRef(0);  // ✅ Track last payment button click time for debouncing
-  
-  // Create a debounced version of handlePayment to prevent rapid double-clicks/taps
-  const debouncedHandlePayment = useRef(
-    debounce(() => {
-      // Prevent too-rapid payment attempts (less than 500ms apart)
-      const now = Date.now();
-      if (now - lastPaymentClickRef.current < 500) {
-        console.warn('Payment button clicked too quickly, ignoring');
-        return;
-      }
-      lastPaymentClickRef.current = now;
-      
-      // Call the actual payment handler
-      handlePaymentClick();
-    }, 100)  // 100ms debounce delay
-  ).current;
   
   // Debounce search query to prevent excessive filtering
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -509,7 +492,15 @@ export default function POS() {
   const isValidPaymentMethod = ['cash', 'card', 'split'].includes(paymentMethod);
 
   const handlePaymentClick = () => {
-    // This wrapper is called by the debounced handler
+    // Prevent too-rapid payment attempts (less than 500ms apart)
+    const now = Date.now();
+    if (now - lastPaymentClickRef.current < 500) {
+      console.warn('Payment button clicked too quickly, ignoring');
+      return;
+    }
+    lastPaymentClickRef.current = now;
+    
+    // Call the actual payment handler
     handlePayment();
   };
 
@@ -1335,16 +1326,7 @@ export default function POS() {
               ) : (
                 <>
                   <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      debouncedHandlePayment();
-                    }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    style={{ touchAction: 'manipulation' }}
+                    onClick={() => handlePaymentClick()}
                     disabled={!isValidPaymentMethod || isProcessing}
                     className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-4 rounded-xl font-semibold text-lg touch-manipulation active:scale-98 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
@@ -1566,16 +1548,7 @@ export default function POS() {
 
               <div className="p-4 border-t space-y-2">
                 <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debouncedHandlePayment();
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  style={{ touchAction: 'manipulation' }}
+                  onClick={() => handlePaymentClick()}
                   disabled={!isValidPaymentMethod || isProcessing}
                   className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center touch-manipulation transition-all"
                 >
