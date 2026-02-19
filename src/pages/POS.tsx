@@ -1685,6 +1685,53 @@ export default function POS() {
                     </button>
                   </div>
                 </div>
+
+                {/* Cash Input Section for Desktop */}
+                {(paymentMethod === 'cash' || paymentMethod === 'split') && (
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-3 border border-blue-200">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cash Received
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-gray-500 font-semibold">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={cashReceived}
+                          onChange={(e) => setCashReceived(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full pl-8 pr-4 py-2 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Change Due
+                      </label>
+                      <div className="w-full px-4 py-2 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
+                        {formatCurrency(cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cash in Drawer
+                      </label>
+                      <div className="w-full px-4 py-2 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
+                        {formatCurrency(user?.cash_on_hand || 0)}
+                      </div>
+                    </div>
+
+                    {cashReceived && parseFloat(cashReceived) < total && (
+                      <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                        ⚠️ Cash received must cover the total.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="p-4 border-t space-y-2">
