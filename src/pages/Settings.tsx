@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { Save, X } from 'lucide-react';
+import { Save, X, Coins } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { formatCurrency } from '../utils/currency';
 
 interface SettingsFormData {
   store: {
@@ -41,6 +43,14 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
+  // Cash drawer management state (admin only)
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [newCashAmount, setNewCashAmount] = useState('');
+  const [cashAdjustmentReason, setCashAdjustmentReason] = useState('');
+  const [adjustingCash, setAdjustingCash] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
   // Helper to safely handle numeric values - prevents NaN from appearing in inputs
   const getSafeNumericValue = (value: any, defaultValue: number = 0): number => {
     const num = Number(value);
@@ -68,6 +78,91 @@ export default function Settings() {
     
     setFormData(safeSettings);
   }, [settings]);
+
+  // Load users for cash adjustment (admin only)
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchUsers();
+    }
+  }, [user?.role]);
+
+  const fetchUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, role, cash_on_hand')
+        .order('first_name');
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast.error('Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleCashAdjustment = async () => {
+    if (!selectedUserId || !newCashAmount) {
+      toast.error('Please select a user and enter a new cash amount');
+      return;
+    }
+
+    try {
+      setAdjustingCash(true);
+
+      // Get the selected user's current cash balance
+      const selectedUser = users.find(u => u.id === selectedUserId);
+      if (!selectedUser) {
+        toast.error('User not found');
+        return;
+      }
+
+      const oldAmount = selectedUser.cash_on_hand || 0;
+      const newAmount = parseFloat(newCashAmount);
+
+      if (isNaN(newAmount)) {
+        toast.error('Invalid amount');
+        return;
+      }
+
+      // Update the user's cash_on_hand
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ cash_on_hand: newAmount })
+        .eq('id', selectedUserId);
+
+      if (updateError) throw updateError;
+
+      // Log the adjustment to cash_adjustments table
+      const { error: logError } = await supabase
+        .from('cash_adjustments')
+        .insert({
+          user_id: selectedUserId,
+          admin_id: user?.id,
+          old_amount: oldAmount,
+          new_amount: newAmount,
+          reason: cashAdjustmentReason || null
+        });
+
+      if (logError) throw logError;
+
+      toast.success(`Cash balance adjusted from ${formatCurrency(oldAmount)} to ${formatCurrency(newAmount)}`);
+      
+      // Reset form and refresh users list
+      setSelectedUserId('');
+      setNewCashAmount('');
+      setCashAdjustmentReason('');
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Error adjusting cash:', error);
+      toast.error(error.message || 'Failed to adjust cash balance');
+    } finally {
+      setAdjustingCash(false);
+    }
+  };
 
   if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
     return (
@@ -430,6 +525,83 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* Cash Drawer Management (Admin Only) */}
+      {user?.role === 'admin' && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center mb-6">
+            <Coins className="h-6 w-6 text-green-600 mr-2" />
+            <h2 className="text-xl font-semibold text-gray-900">Cash Drawer Management</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Cashier</label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                disabled={adjustingCash}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <option value="">Choose a user...</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.first_name} {u.last_name} ({u.role}) - Current: {formatCurrency(u.cash_on_hand || 0)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedUserId && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Current Cash Balance</label>
+                  <div className="block w-full px-4 py-2 rounded-md border border-gray-300 bg-gray-50 text-gray-900 font-semibold">
+                    {formatCurrency(users.find(u => u.id === selectedUserId)?.cash_on_hand || 0)}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">New Cash Amount</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3 text-gray-500">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={newCashAmount}
+                      onChange={(e) => setNewCashAmount(e.target.value)}
+                      placeholder="0.00"
+                      disabled={adjustingCash}
+                      className="block w-full pl-8 pr-4 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Reason (Optional)</label>
+                  <input
+                    type="text"
+                    value={cashAdjustmentReason}
+                    onChange={(e) => setCashAdjustmentReason(e.target.value)}
+                    placeholder="e.g., Cash drop, Opening balance, Correction"
+                    disabled={adjustingCash}
+                    className="block w-full px-4 py-2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                </div>
+
+                <button
+                  onClick={handleCashAdjustment}
+                  disabled={adjustingCash || !newCashAmount}
+                  className="w-full bg-green-600 text-white py-2 rounded-md font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {adjustingCash ? 'Saving...' : 'Update Cash Balance'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

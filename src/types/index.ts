@@ -7,6 +7,7 @@ export interface User {
   firstName: string;
   lastName: string;
   created_at: string;
+  cash_on_hand?: number;
 }
 
 export interface Product {

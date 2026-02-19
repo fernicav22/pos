@@ -80,6 +80,7 @@ export default function POS() {
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customers, setCustomers] = useState<any[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [cashReceived, setCashReceived] = useState('');
   
   // Payment processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -534,38 +535,92 @@ export default function POS() {
         return;
       }
 
-      // Create the sale
-      const { data: sale, error: saleError } = await supabase
-        .from('sales')
-        .insert([{
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          customer_id: selectedCustomer?.id || null,
-          subtotal,
-          tax,
-          shipping: shippingCost,
-          total,
-          payment_method: paymentMethod,
-          payment_status: 'completed'
-        }])
-        .select()
-        .single();
+      // Calculate change for cash/split payments
+      let changeGiven = 0;
+      let cashTendered = 0;
+      if ((paymentMethod === 'cash' || paymentMethod === 'split') && cashReceived) {
+        cashTendered = parseFloat(cashReceived);
+        changeGiven = Math.round((cashTendered - total) * 100) / 100; // Round to 2 decimals
+      }
 
-      if (saleError) throw saleError;
-
+      const userId = (await supabase.auth.getUser()).data.user?.id;
       const saleItems = cart.map(item => ({
-        sale_id: sale.id,
         product_id: item.id,
         quantity: item.quantity,
         price: item.price,
         subtotal: item.price * item.quantity
       }));
 
-      // Insert sale items - the database trigger will handle stock reduction
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(saleItems);
+      let sale;
 
-      if (itemsError) throw itemsError;
+      // For cash/split payments: use atomic RPC function
+      if ((paymentMethod === 'cash' || paymentMethod === 'split')) {
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('complete_cash_sale', {
+          p_user_id: userId,
+          p_customer_id: selectedCustomer?.id || null,
+          p_subtotal: subtotal,
+          p_tax: tax,
+          p_shipping: shippingCost,
+          p_total: total,
+          p_payment_method: paymentMethod,
+          p_cash_tendered: cashTendered || null,
+          p_change_given: changeGiven || null,
+          p_sale_items: saleItems
+        });
+
+        if (rpcError) throw rpcError;
+
+        // Extract sale_id from RPC response
+        const saleId = rpcResult?.sale_id;
+        if (!saleId) throw new Error('Failed to create sale - no sale ID returned');
+
+        // Fetch the created sale with related data
+        const { data: fetchedSale, error: fetchError } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('id', saleId)
+          .single();
+
+        if (fetchError) throw fetchError;
+        sale = fetchedSale;
+
+        // Update local auth store with new cash balance
+        if (changeGiven > 0 && user?.id) {
+          const newCashBalance = (user.cash_on_hand || 0) - changeGiven;
+          useAuthStore.getState().updateCashOnHand(newCashBalance);
+        }
+      } else {
+        // For card payments: use existing three-step process
+        const { data: cardSale, error: saleError } = await supabase
+          .from('sales')
+          .insert([{
+            user_id: userId,
+            customer_id: selectedCustomer?.id || null,
+            subtotal,
+            tax,
+            shipping: shippingCost,
+            total,
+            payment_method: paymentMethod,
+            payment_status: 'completed',
+            cash_tendered: null,
+            change_given: null
+          }])
+          .select()
+          .single();
+
+        if (saleError) throw saleError;
+        sale = cardSale;
+
+        // Insert sale items - the database trigger will handle stock reduction
+        const { error: itemsError } = await supabase
+          .from('sale_items')
+          .insert(saleItems.map(item => ({
+            sale_id: sale.id,
+            ...item
+          })));
+
+        if (itemsError) throw itemsError;
+      }
 
       // If this sale was from a draft order, delete the draft
       if (currentDraftId) {
@@ -619,6 +674,7 @@ export default function POS() {
       setSelectedCustomer(null);
       setShippingCost(0);
       setPaymentMethod('');
+      setCashReceived('');
       setCurrentDraftId(null);
       
       // Show receipt modal
@@ -1318,6 +1374,52 @@ export default function POS() {
                     </div>
                     <span className="ml-4 font-semibold text-lg">Split Payment</span>
                   </button>
+
+                  {(paymentMethod === 'cash' || paymentMethod === 'split') && (
+                    <div className="bg-blue-50 p-4 rounded-xl space-y-3 mt-4 border border-blue-200">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cash Received
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-3 text-gray-500">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={cashReceived}
+                            onChange={(e) => setCashReceived(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-8 pr-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Change Due
+                        </label>
+                        <div className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
+                          {formatCurrency(cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0)}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cash in Drawer
+                        </label>
+                        <div className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
+                          {formatCurrency(user?.cash_on_hand || 0)}
+                        </div>
+                      </div>
+
+                      {cashReceived && parseFloat(cashReceived) < total && (
+                        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                          Cash received must cover the total.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1366,7 +1468,7 @@ export default function POS() {
                 <>
                   <button
                     onClick={() => handlePaymentClick()}
-                    disabled={!isValidPaymentMethod || isProcessing}
+                    disabled={!isValidPaymentMethod || isProcessing || ((paymentMethod === 'cash' || paymentMethod === 'split') && (!cashReceived || parseFloat(cashReceived) < total))}
                     className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-4 rounded-xl font-semibold text-lg touch-manipulation active:scale-98 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
                     {isProcessing ? (
@@ -1588,7 +1690,7 @@ export default function POS() {
               <div className="p-4 border-t space-y-2">
                 <button
                   onClick={() => handlePaymentClick()}
-                  disabled={!isValidPaymentMethod || isProcessing}
+                  disabled={!isValidPaymentMethod || isProcessing || ((paymentMethod === 'cash' || paymentMethod === 'split') && (!cashReceived || parseFloat(cashReceived) < total))}
                   className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center touch-manipulation transition-all"
                 >
                   {isProcessing ? (

@@ -8,6 +8,7 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (user: User | null) => void;
+  updateCashOnHand: (newAmount: number) => void;
   initializeAuth: () => Promise<void>;
 }
 
@@ -51,7 +52,7 @@ const fetchAndSetUser = async (userId: string, maxRetries = 1): Promise<void> =>
         // Create the fetch promise - only select needed columns
         const fetchPromise = supabase
           .from('users')
-          .select('id, email, role, first_name, last_name, created_at')
+          .select('id, email, role, first_name, last_name, created_at, cash_on_hand')
           .eq('id', userId)
           .single();
         
@@ -96,7 +97,8 @@ const fetchAndSetUser = async (userId: string, maxRetries = 1): Promise<void> =>
           role: userData.role,
           firstName: userData.first_name,
           lastName: userData.last_name,
-          created_at: userData.created_at
+          created_at: userData.created_at,
+          cash_on_hand: userData.cash_on_hand || 0
         };
 
         console.log('AuthStore: Setting user state');
@@ -215,6 +217,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => {
     console.log('AuthStore: setUser called with:', user ? 'user data' : 'null');
     set({ user, loading: false });
+  },
+
+  updateCashOnHand: (newAmount: number) => {
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser) {
+      console.log('AuthStore: Updating cash_on_hand from', currentUser.cash_on_hand, 'to', newAmount);
+      set({ user: { ...currentUser, cash_on_hand: newAmount } });
+    }
   },
 }));
 
