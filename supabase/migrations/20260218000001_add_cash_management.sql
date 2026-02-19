@@ -114,7 +114,7 @@ BEGIN
   INSERT INTO sale_items (sale_id, product_id, quantity, price, subtotal)
   SELECT
     v_sale_id,
-    item->>'product_id',
+    (item->>'product_id')::UUID,
     (item->>'quantity')::INTEGER,
     (item->>'price')::DECIMAL(10,2),
     (item->>'subtotal')::DECIMAL(10,2)
