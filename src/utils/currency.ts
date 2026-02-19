@@ -40,3 +40,13 @@ export function calculateTotal(subtotal: number, tax: number, shipping: number =
   const totalCents = toCents(subtotal) + toCents(tax) + toCents(shipping);
   return toDollars(totalCents);
 }
+
+/**
+ * Format amount as currency string
+ */
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+}

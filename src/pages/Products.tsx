@@ -3,6 +3,7 @@ import { Plus, Search, Filter, BarChart2, Download, Upload, AlertTriangle } from
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useDebounce } from '../hooks/useDebounce';
 
 interface Product {
@@ -31,6 +32,7 @@ interface ProductFormData {
 
 export default function Products() {
   const { user } = useAuthStore();
+  const { formatCurrency, settings } = useSettingsStore();
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showEditProduct, setShowEditProduct] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -219,7 +221,7 @@ export default function Products() {
           cost: formData.cost,
           stock_quantity: formData.stockQuantity,
           category_id: null,
-          low_stock_alert: 5,
+          low_stock_alert: settings.inventory.lowStockThreshold,
           active: true
         }])
         .select()
@@ -432,7 +434,7 @@ export default function Products() {
                     {product.sku}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${product.price}
+                    {formatCurrency(product.price)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {product.stock_quantity}

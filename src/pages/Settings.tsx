@@ -4,7 +4,6 @@ import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { Save, X, Coins } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { formatCurrency } from '../utils/currency';
 
 interface SettingsFormData {
   store: {
@@ -38,7 +37,7 @@ interface SettingsFormData {
 
 export default function Settings() {
   const { user } = useAuthStore();
-  const { settings, updateSettings, loadSettings } = useSettingsStore();
+  const { settings, updateSettings, loadSettings, formatCurrency } = useSettingsStore();
   const [formData, setFormData] = useState<SettingsFormData>(settings);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -564,7 +563,7 @@ export default function Settings() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">New Cash Amount</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-3 text-gray-500">$</span>
+                    <span className="absolute left-4 top-3 text-gray-500">{settings.currency.symbol}</span>
                     <input
                       type="number"
                       min="0"
