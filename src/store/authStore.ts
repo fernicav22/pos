@@ -256,7 +256,8 @@ const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event,
       
     case 'SIGNED_IN':
       // Fetch user data on sign in
-      if (session?.user) {
+      // Skip if user already set (INITIAL_SESSION will have handled it)
+      if (session?.user && !useAuthStore.getState().user) {
         console.log('AuthStore: SIGNED_IN event, fetching user data');
         await fetchAndSetUser(session.user.id);
       }

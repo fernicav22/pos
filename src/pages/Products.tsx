@@ -571,7 +571,7 @@ export default function Products() {
                   <input
                     type="number"
                     name="price"
-                    value={formData.price}
+                    value={isNaN(formData.price) ? 0 : formData.price}
                     onChange={handleInputChange}
                     min="0"
                     step="0.01"
@@ -710,7 +710,7 @@ export default function Products() {
                   <input
                     type="number"
                     name="price"
-                    value={formData.price}
+                    value={isNaN(formData.price) ? 0 : formData.price}
                     onChange={handleInputChange}
                     min="0"
                     step="0.01"

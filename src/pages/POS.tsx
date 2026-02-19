@@ -1053,7 +1053,7 @@ export default function POS() {
           <div className="p-3 grid grid-cols-2 gap-3 overflow-y-auto">
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="animate-pulse">
+                <div key={`skeleton-${i}`} className="animate-pulse">
                   <div className="aspect-square bg-gray-200 rounded-xl mb-2"></div>
                   <div className="h-4 bg-gray-200 rounded mb-1"></div>
                   <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -1445,7 +1445,7 @@ export default function POS() {
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 h-[calc(100%-8rem)] overflow-y-auto">
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="animate-pulse">
+                <div key={`skeleton-${i}`} className="animate-pulse">
                   <div className="aspect-square bg-gray-200 rounded-lg mb-2"></div>
                   <div className="h-4 bg-gray-200 rounded mb-2"></div>
                   <div className="h-4 bg-gray-200 rounded w-1/2"></div>
@@ -1676,7 +1676,7 @@ export default function POS() {
                         type="number"
                         min="1"
                         max={item.stock_quantity}
-                        value={item.quantity}
+                        value={isNaN(item.quantity) ? 1 : item.quantity}
                         onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value))}
                         className="w-16 px-2 py-1 border rounded-lg mr-2"
                       />

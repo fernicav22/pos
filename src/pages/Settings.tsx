@@ -226,7 +226,7 @@ export default function Settings() {
                     min="0"
                     max="100"
                     step="0.01"
-                    value={formData.tax.rate}
+                    value={isNaN(formData.tax.rate) ? 0 : formData.tax.rate}
                     onChange={(e) => handleInputChange('tax', 'rate', parseFloat(e.target.value))}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
@@ -314,7 +314,7 @@ export default function Settings() {
                   <input
                     type="number"
                     min="0"
-                    value={formData.inventory.lowStockThreshold}
+                    value={isNaN(formData.inventory.lowStockThreshold) ? 0 : formData.inventory.lowStockThreshold}
                     onChange={(e) => handleInputChange('inventory', 'lowStockThreshold', parseInt(e.target.value))}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
@@ -330,7 +330,7 @@ export default function Settings() {
                   <input
                     type="number"
                     min="0"
-                    value={formData.inventory.outOfStockThreshold}
+                    value={isNaN(formData.inventory.outOfStockThreshold) ? 0 : formData.inventory.outOfStockThreshold}
                     onChange={(e) => handleInputChange('inventory', 'outOfStockThreshold', parseInt(e.target.value))}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />

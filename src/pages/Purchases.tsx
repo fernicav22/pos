@@ -617,7 +617,7 @@ export default function Purchases() {
                           <input
                             type="number"
                             min="1"
-                            value={item.quantity}
+                            value={isNaN(item.quantity) ? 0 : item.quantity}
                             onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value))}
                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="Qty"
@@ -629,7 +629,7 @@ export default function Purchases() {
                             type="number"
                             min="0"
                             step="0.01"
-                            value={item.cost_per_unit}
+                            value={isNaN(item.cost_per_unit) ? 0 : item.cost_per_unit}
                             onChange={(e) => handleItemChange(index, 'cost_per_unit', parseFloat(e.target.value))}
                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="Cost"
@@ -661,7 +661,7 @@ export default function Purchases() {
                       min="0"
                       max="100"
                       step="0.01"
-                      value={formData.tax_rate}
+                      value={isNaN(formData.tax_rate) ? 0 : formData.tax_rate}
                       onChange={(e) => setFormData(prev => ({ ...prev, tax_rate: parseFloat(e.target.value) }))}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     />
