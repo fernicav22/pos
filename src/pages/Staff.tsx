@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { User } from '../types';
 
@@ -8,10 +9,16 @@ export default function Staff() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const currentUser = useAuthStore((state) => state.user);
 
   useEffect(() => {
-    fetchStaff();
-  }, []);
+    if (currentUser?.role === 'admin') {
+      fetchStaff();
+    } else {
+      setError('Only administrators can view staff management');
+      setLoading(false);
+    }
+  }, [currentUser?.role]);
 
   const fetchStaff = async () => {
     try {
@@ -62,11 +69,12 @@ export default function Staff() {
       </div>
 
       {error && (
-        <div className="bg-red-50 p-4 rounded-lg">
-          <p className="text-red-800">{error}</p>
+        <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+          <p className="text-red-800 font-medium">{error}</p>
         </div>
       )}
 
+      {!error && (
       <div className="bg-white shadow rounded-lg">
         <div className="overflow-x-auto">
           {loading ? (
@@ -136,7 +144,7 @@ export default function Staff() {
             </table>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
