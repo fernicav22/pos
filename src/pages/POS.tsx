@@ -81,6 +81,7 @@ export default function POS() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [cashReceived, setCashReceived] = useState('');
+  const [cardAmount, setCardAmount] = useState(0);
   
   // Payment processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -538,9 +539,14 @@ export default function POS() {
       // Calculate change for cash/split payments
       let changeGiven = 0;
       let cashTendered = 0;
-      if ((paymentMethod === 'cash' || paymentMethod === 'split') && cashReceived) {
+      if (paymentMethod === 'cash' && cashReceived) {
         cashTendered = parseFloat(cashReceived);
         changeGiven = Math.round((cashTendered - total) * 100) / 100; // Round to 2 decimals
+      } else if (paymentMethod === 'split' && cashReceived) {
+        // For split: change only from cash portion (cashReceived - cardAmount)
+        cashTendered = parseFloat(cashReceived);
+        const calculatedCardAmount = total - cashTendered;
+        changeGiven = 0; // No change for split payments (exact split)
       }
 
       const userId = (await supabase.auth.getUser()).data.user?.id;
@@ -554,7 +560,7 @@ export default function POS() {
       let sale;
 
       // For cash/split payments: use atomic RPC function
-      if ((paymentMethod === 'cash' || paymentMethod === 'split')) {
+      if (paymentMethod === 'cash' || paymentMethod === 'split') {
         const { data: rpcResult, error: rpcError } = await supabase.rpc('complete_cash_sale', {
           p_user_id: userId,
           p_customer_id: selectedCustomer?.id || null,
@@ -1379,7 +1385,7 @@ export default function POS() {
                     <div className="bg-blue-50 p-4 rounded-xl space-y-3 mt-4 border border-blue-200">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Cash Received
+                          {paymentMethod === 'split' ? 'Cash Amount' : 'Cash Received'}
                         </label>
                         <div className="relative">
                           <span className="absolute left-4 top-3 text-gray-500">$</span>
@@ -1388,21 +1394,46 @@ export default function POS() {
                             min="0"
                             step="0.01"
                             value={cashReceived}
-                            onChange={(e) => setCashReceived(e.target.value)}
+                            onChange={(e) => {
+                              setCashReceived(e.target.value);
+                              if (paymentMethod === 'split' && e.target.value) {
+                                const cash = parseFloat(e.target.value);
+                                setCardAmount(Math.max(0, total - cash));
+                              }
+                            }}
                             placeholder="0.00"
                             className="w-full pl-8 pr-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Change Due
-                        </label>
-                        <div className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
-                          {formatCurrency(cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0)}
+                      {paymentMethod === 'split' && cashReceived && (
+                        <div className="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Cash:</span>
+                            <span className="font-semibold text-gray-900">{formatCurrency(parseFloat(cashReceived))}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Card:</span>
+                            <span className="font-semibold text-gray-900">{formatCurrency(Math.max(0, total - parseFloat(cashReceived)))}</span>
+                          </div>
+                          <div className="flex justify-between text-sm border-t pt-2 font-semibold">
+                            <span className="text-gray-900">Total:</span>
+                            <span className="text-blue-600">{formatCurrency(total)}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {paymentMethod === 'cash' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Change Due
+                          </label>
+                          <div className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
+                            {formatCurrency(cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0)}
+                          </div>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1413,9 +1444,15 @@ export default function POS() {
                         </div>
                       </div>
 
-                      {cashReceived && parseFloat(cashReceived) < total && (
+                      {paymentMethod === 'cash' && cashReceived && parseFloat(cashReceived) < total && (
                         <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
                           Cash received must cover the total.
+                        </div>
+                      )}
+
+                      {paymentMethod === 'split' && cashReceived && parseFloat(cashReceived) >= total && (
+                        <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                          ⚠️ For split payment, cash must be less than the total.
                         </div>
                       )}
                     </div>
@@ -1468,7 +1505,9 @@ export default function POS() {
                 <>
                   <button
                     onClick={() => handlePaymentClick()}
-                    disabled={!isValidPaymentMethod || isProcessing || ((paymentMethod === 'cash' || paymentMethod === 'split') && (!cashReceived || parseFloat(cashReceived) < total))}
+                    disabled={!isValidPaymentMethod || isProcessing || 
+                      (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < total)) || 
+                      (paymentMethod === 'split' && (!cashReceived || parseFloat(cashReceived) <= 0 || parseFloat(cashReceived) >= total))}
                     className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-4 rounded-xl font-semibold text-lg touch-manipulation active:scale-98 transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
                     {isProcessing ? (
@@ -1691,7 +1730,7 @@ export default function POS() {
                   <div className="bg-blue-50 p-4 rounded-lg space-y-3 border border-blue-200">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Cash Received
+                        {paymentMethod === 'split' ? 'Cash Amount' : 'Cash Received'}
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-2 text-gray-500 font-semibold">$</span>
@@ -1700,21 +1739,46 @@ export default function POS() {
                           min="0"
                           step="0.01"
                           value={cashReceived}
-                          onChange={(e) => setCashReceived(e.target.value)}
+                          onChange={(e) => {
+                            setCashReceived(e.target.value);
+                            if (paymentMethod === 'split' && e.target.value) {
+                              const cash = parseFloat(e.target.value);
+                              setCardAmount(Math.max(0, total - cash));
+                            }
+                          }}
                           placeholder="0.00"
                           className="w-full pl-8 pr-4 py-2 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Change Due
-                      </label>
-                      <div className="w-full px-4 py-2 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
-                        {formatCurrency(cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0)}
+                    {paymentMethod === 'split' && cashReceived && (
+                      <div className="bg-white p-3 rounded-lg border border-blue-100 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Cash:</span>
+                          <span className="font-semibold text-gray-900">{formatCurrency(parseFloat(cashReceived))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Card:</span>
+                          <span className="font-semibold text-gray-900">{formatCurrency(Math.max(0, total - parseFloat(cashReceived)))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm border-t pt-2 font-semibold">
+                          <span className="text-gray-900">Total:</span>
+                          <span className="text-blue-600">{formatCurrency(total)}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {paymentMethod === 'cash' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Change Due
+                        </label>
+                        <div className="w-full px-4 py-2 text-lg border border-gray-300 rounded-lg bg-white font-semibold text-gray-900">
+                          {formatCurrency(cashReceived ? Math.max(0, parseFloat(cashReceived) - total) : 0)}
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1725,9 +1789,15 @@ export default function POS() {
                       </div>
                     </div>
 
-                    {cashReceived && parseFloat(cashReceived) < total && (
+                    {paymentMethod === 'cash' && cashReceived && parseFloat(cashReceived) < total && (
                       <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
                         ⚠️ Cash received must cover the total.
+                      </div>
+                    )}
+
+                    {paymentMethod === 'split' && cashReceived && parseFloat(cashReceived) >= total && (
+                      <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                        ⚠️ For split payment, cash must be less than the total.
                       </div>
                     )}
                   </div>
@@ -1737,7 +1807,9 @@ export default function POS() {
               <div className="p-4 border-t space-y-2">
                 <button
                   onClick={() => handlePaymentClick()}
-                  disabled={!isValidPaymentMethod || isProcessing || ((paymentMethod === 'cash' || paymentMethod === 'split') && (!cashReceived || parseFloat(cashReceived) < total))}
+                  disabled={!isValidPaymentMethod || isProcessing || 
+                    (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < total)) || 
+                    (paymentMethod === 'split' && (!cashReceived || parseFloat(cashReceived) <= 0 || parseFloat(cashReceived) >= total))}
                   className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center touch-manipulation transition-all"
                 >
                   {isProcessing ? (
