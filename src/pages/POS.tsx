@@ -590,10 +590,16 @@ export default function POS() {
         if (fetchError) throw fetchError;
         sale = fetchedSale;
 
-        // Update local auth store with new cash balance
-        if (changeGiven > 0 && user?.id) {
-          const newCashBalance = (user.cash_on_hand || 0) - changeGiven;
-          useAuthStore.getState().updateCashOnHand(newCashBalance);
+        // Fetch fresh user data to get the updated cash_on_hand from the database
+        // (The RPC already deducted it, so we need to sync the local state)
+        const { data: updatedUser, error: userError } = await supabase
+          .from('users')
+          .select('cash_on_hand')
+          .eq('id', userId)
+          .single();
+
+        if (!userError && updatedUser) {
+          useAuthStore.getState().updateCashOnHand(updatedUser.cash_on_hand);
         }
       } else {
         // For card payments: use existing three-step process
