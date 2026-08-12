@@ -75,6 +75,8 @@ export default function Purchases() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isSavingPurchase, setIsSavingPurchase] = useState(false);
+  const [receivingId, setReceivingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<NewPurchaseFormData>({
     supplier_id: '',
     reference_number: '',
@@ -172,6 +174,25 @@ export default function Purchases() {
     return calculateSubtotal() + calculateTax();
   }, [calculateSubtotal, calculateTax]);
 
+  const supplierError = useMemo(() => {
+    return formData.supplier_id ? null : 'Select a supplier before saving.';
+  }, [formData.supplier_id]);
+
+  const itemsError = useMemo(() => {
+    if (formData.items.length === 0) {
+      return 'Add at least one item before saving the purchase order.';
+    }
+    const hasInvalidItem = formData.items.some(
+      item => !item.product_id || !item.quantity || isNaN(item.quantity) || item.quantity <= 0
+    );
+    if (hasInvalidItem) {
+      return 'Every item needs a product and a quantity greater than 0.';
+    }
+    return null;
+  }, [formData.items]);
+
+  const isPurchaseFormValid = !supplierError && !itemsError;
+
   const handleAddItem = useCallback(() => {
     setFormData(prev => ({
       ...prev,
@@ -217,6 +238,9 @@ export default function Purchases() {
   };
 
   const handleReceivePurchase = async (purchase: Purchase) => {
+    if (receivingId) return; // prevent duplicate receives from a double click
+    setReceivingId(purchase.id);
+
     try {
       // Optimistic update: update in local state immediately
       setPurchases(prev => prev.map(p => 
@@ -228,6 +252,25 @@ export default function Purchases() {
             }
           : p
       ));
+
+      // Mark items as fully received first so the stock trigger has a real quantity to add
+      const { data: items, error: itemsFetchError } = await supabase
+        .from('purchase_items')
+        .select('id, quantity')
+        .eq('purchase_id', purchase.id);
+
+      if (itemsFetchError) throw itemsFetchError;
+
+      const itemUpdates = await Promise.all(
+        (items || []).map(item =>
+          supabase
+            .from('purchase_items')
+            .update({ received_quantity: item.quantity })
+            .eq('id', item.id)
+        )
+      );
+      const itemUpdateError = itemUpdates.find(result => result.error)?.error;
+      if (itemUpdateError) throw itemUpdateError;
 
       const { error } = await supabase
         .from('purchases')
@@ -246,18 +289,27 @@ export default function Purchases() {
       }
 
       toast.success('Purchase received successfully');
+      fetchProducts(); // refresh stock quantities shown in this page
     } catch (error) {
       console.error('Error receiving purchase:', error);
       toast.error('Failed to receive purchase');
+    } finally {
+      setReceivingId(null);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (isSavingPurchase) return; // prevent duplicate submits from a double click
+    if (supplierError || itemsError) {
+      toast.error(supplierError || itemsError || 'Please fix the errors before saving');
+      return;
+    }
+
+    setIsSavingPurchase(true);
     try {
       if (!user) throw new Error('User not authenticated');
-      if (formData.items.length === 0) throw new Error('Please add at least one item');
 
       const subtotal = calculateSubtotal();
       const tax = calculateTax();
@@ -327,6 +379,8 @@ export default function Purchases() {
     } catch (error: any) {
       console.error('Error creating purchase:', error);
       toast.error(error.message || 'Failed to create purchase');
+    } finally {
+      setIsSavingPurchase(false);
     }
   };
 
@@ -486,9 +540,10 @@ export default function Purchases() {
                       {purchase.status === 'ordered' && (
                         <button
                           onClick={() => handleReceivePurchase(purchase)}
-                          className="text-green-600 hover:text-green-900"
+                          disabled={receivingId === purchase.id}
+                          className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Receive
+                          {receivingId === purchase.id ? 'Receiving...' : 'Receive'}
                         </button>
                       )}
                     </td>
@@ -532,7 +587,6 @@ export default function Purchases() {
                       value={formData.supplier_id}
                       onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      required
                     >
                       <option value="">Select Supplier</option>
                       {suppliers.map(supplier => (
@@ -541,6 +595,9 @@ export default function Purchases() {
                         </option>
                       ))}
                     </select>
+                    {supplierError && (
+                      <p className="mt-1 text-sm text-red-600">{supplierError}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">
@@ -649,6 +706,9 @@ export default function Purchases() {
                       </div>
                     ))}
                   </div>
+                  {itemsError && (
+                    <p className="mt-2 text-sm text-red-600">{itemsError}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -705,9 +765,10 @@ export default function Purchases() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                    disabled={!isPurchaseFormValid || isSavingPurchase}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Create Purchase Order
+                    {isSavingPurchase ? 'Saving...' : 'Create Purchase Order'}
                   </button>
                 </div>
               </div>

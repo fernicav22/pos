@@ -144,6 +144,7 @@ export default function Staff() {
             </table>
           )}
         </div>
+      </div>
       )}
     </div>
   );
