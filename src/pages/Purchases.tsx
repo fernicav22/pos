@@ -77,6 +77,9 @@ export default function Purchases() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [isSavingSupplier, setIsSavingSupplier] = useState(false);
+  const [newSupplierData, setNewSupplierData] = useState({ name: '', phone: '', email: '' });
   const [formData, setFormData] = useState<NewPurchaseFormData>({
     supplier_id: '',
     reference_number: '',
@@ -131,6 +134,7 @@ export default function Purchases() {
         .order('name');
 
       if (error) throw error;
+      console.log('[Purchases] fetchProducts resolved, count:', (data || []).length);
       setProducts(data || []);
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -148,6 +152,50 @@ export default function Purchases() {
     };
     loadData();
   }, [fetchPurchases, fetchSuppliers, fetchProducts]);
+
+  const handleCreateSupplier = async () => {
+    if (isSavingSupplier) return;
+    if (!newSupplierData.name.trim()) {
+      toast.error('Supplier name is required');
+      return;
+    }
+
+    setIsSavingSupplier(true);
+    try {
+      const { data: supplier, error } = await supabase
+        .from('suppliers')
+        .insert([{
+          name: newSupplierData.name.trim(),
+          phone: newSupplierData.phone.trim() || null,
+          email: newSupplierData.email.trim() || null
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (supplier) {
+        setSuppliers(prev => [...prev, supplier].sort((a, b) => a.name.localeCompare(b.name)));
+        setFormData(prev => ({ ...prev, supplier_id: supplier.id }));
+      }
+
+      toast.success('Supplier added successfully');
+      setNewSupplierData({ name: '', phone: '', email: '' });
+      setShowAddSupplier(false);
+    } catch (error) {
+      console.error('Error creating supplier:', error);
+      const message = error instanceof Error ? error.message : 'Failed to create supplier';
+      toast.error(message);
+    } finally {
+      setIsSavingSupplier(false);
+    }
+  };
+
+  const handleCloseAddPurchase = () => {
+    setShowAddPurchase(false);
+    setShowAddSupplier(false);
+    setNewSupplierData({ name: '', phone: '', email: '' });
+  };
 
   const filteredPurchases = useMemo(() => {
     return purchases.filter(purchase => {
@@ -366,7 +414,7 @@ export default function Purchases() {
       }
 
       toast.success('Purchase order created successfully');
-      setShowAddPurchase(false);
+      handleCloseAddPurchase();
       setFormData({
         supplier_id: '',
         reference_number: '',
@@ -423,7 +471,11 @@ export default function Purchases() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-900">Supplier Purchases</h1>
         <button
-          onClick={() => setShowAddPurchase(true)}
+          onClick={() => {
+            setShowAddPurchase(true);
+            fetchSuppliers();
+            fetchProducts();
+          }}
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -570,7 +622,7 @@ export default function Purchases() {
                 <h2 className="text-xl font-semibold text-gray-900">New Purchase Order</h2>
                 <button
                   type="button"
-                  onClick={() => setShowAddPurchase(false)}
+                  onClick={handleCloseAddPurchase}
                   className="text-gray-400 hover:text-gray-500"
                 >
                   <X className="h-6 w-6" />
@@ -580,9 +632,18 @@ export default function Purchases() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Supplier
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Supplier
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddSupplier(prev => !prev)}
+                        className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                      >
+                        {showAddSupplier ? 'Cancel' : '+ New Supplier'}
+                      </button>
+                    </div>
                     <select
                       value={formData.supplier_id}
                       onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
@@ -597,6 +658,44 @@ export default function Purchases() {
                     </select>
                     {supplierError && (
                       <p className="mt-1 text-sm text-red-600">{supplierError}</p>
+                    )}
+                    {suppliers.length === 0 && !showAddSupplier && (
+                      <p className="mt-1 text-sm text-amber-600">No suppliers yet. Click "+ New Supplier" to add one.</p>
+                    )}
+                    {showAddSupplier && (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-md space-y-2">
+                        <input
+                          type="text"
+                          value={newSupplierData.name}
+                          onChange={(e) => setNewSupplierData(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Supplier name"
+                          className="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-blue-500 focus:ring-blue-500"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={newSupplierData.phone}
+                            onChange={(e) => setNewSupplierData(prev => ({ ...prev, phone: e.target.value }))}
+                            placeholder="Phone (optional)"
+                            className="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                          <input
+                            type="email"
+                            value={newSupplierData.email}
+                            onChange={(e) => setNewSupplierData(prev => ({ ...prev, email: e.target.value }))}
+                            placeholder="Email (optional)"
+                            className="block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCreateSupplier}
+                          disabled={isSavingSupplier || !newSupplierData.name.trim()}
+                          className="px-3 py-1 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSavingSupplier ? 'Saving...' : 'Save Supplier'}
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div>
@@ -645,12 +744,19 @@ export default function Purchases() {
                     <button
                       type="button"
                       onClick={handleAddItem}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                      disabled={products.length === 0}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus className="h-4 w-4 mr-1" />
                       Add Item
                     </button>
                   </div>
+
+                  {products.length === 0 && (
+                    <p className="text-sm text-amber-600 mb-2">
+                      No products available. Add products in the Products page before creating a purchase order.
+                    </p>
+                  )}
 
                   <div className="space-y-4">
                     {formData.items.map((item, index) => (
@@ -758,7 +864,7 @@ export default function Purchases() {
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
-                    onClick={() => setShowAddPurchase(false)}
+                    onClick={handleCloseAddPurchase}
                     className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                   >
                     Cancel
