@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Search, Filter, Package, X, Calendar, Truck, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
@@ -363,6 +364,10 @@ export default function Purchases() {
       const tax = calculateTax();
       const total = calculateTotal();
 
+      // Admin purchases are auto-approved; manager purchases need confirmation
+      // (reuses the existing 'draft'/'ordered' schema values, no new status added)
+      const initialStatus = user.role === 'admin' ? 'ordered' : 'draft';
+
       const { data: purchase, error: purchaseError } = await supabase
         .from('purchases')
         .insert([{
@@ -374,7 +379,7 @@ export default function Purchases() {
           subtotal,
           tax,
           total,
-          status: 'ordered',
+          status: initialStatus,
           notes: formData.notes
         }])
         .select()
@@ -413,7 +418,11 @@ export default function Purchases() {
         setPurchases(prev => [newPurchase, ...prev]);
       }
 
-      toast.success('Purchase order created successfully');
+      toast.success(
+        initialStatus === 'draft'
+          ? 'Purchase order created — pending confirmation'
+          : 'Purchase order created and approved'
+      );
       handleCloseAddPurchase();
       setFormData({
         supplier_id: '',
@@ -614,7 +623,10 @@ export default function Purchases() {
       </div>
 
       {/* New Purchase Modal */}
-      {showAddPurchase && (
+      {/* Portaled to document.body so this fixed-position modal isn't nested inside
+          main's overflow-y-auto scroll container (avoids mobile Safari fixed-position
+          mispositioning bugs when nested inside a scrolling ancestor). */}
+      {showAddPurchase && createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSubmit} className="p-6">
@@ -880,11 +892,12 @@ export default function Purchases() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Purchase Details Modal */}
-      {selectedPurchase && (
+      {selectedPurchase && createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
@@ -1010,7 +1023,8 @@ export default function Purchases() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
