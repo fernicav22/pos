@@ -29,7 +29,7 @@ Limited operational access - no system administration
 - ❌ Products
 - ✅ Customers
 - ✅ Purchases
-- ✅ Reports (inventory-oriented: includes a stock/inventory overview card, since managers no longer have direct Products page access)
+- ✅ Reports (item/inventory-oriented only: top selling products by quantity, low stock alerts, stock/inventory overview card; no Total Sales, Top Customers/spend, or Sales Overview chart)
 - ✅ Transactions (limited to today's date only; cannot view other days, no free date range picker)
 - ✅ Dashboard
 - ❌ Staff
@@ -38,6 +38,7 @@ Limited operational access - no system administration
 ### 🟢 Admin
 Full access to everything
 - ✅ All pages (POS, Products, Customers, Purchases, Reports, Transactions, Staff, Settings, Dashboard)
+- ✅ Can approve a manager-created ("draft" status) purchase order via an "Approve" button on the Purchases page, moving it to "ordered" without needing to recreate it
 
 ### 🔵 Customer (new role)
 Purpose: Training mode / customer-facing iPad

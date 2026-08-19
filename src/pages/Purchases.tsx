@@ -78,6 +78,7 @@ export default function Purchases() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [isSavingSupplier, setIsSavingSupplier] = useState(false);
   const [newSupplierData, setNewSupplierData] = useState({ name: '', phone: '', email: '' });
@@ -347,6 +348,38 @@ export default function Purchases() {
     }
   };
 
+  const handleApprovePurchase = async (purchase: Purchase) => {
+    if (approvingId) return; // prevent duplicate approvals from a double click
+    setApprovingId(purchase.id);
+
+    try {
+      // Optimistic update: update in local state immediately
+      setPurchases(prev => prev.map(p =>
+        p.id === purchase.id ? { ...p, status: 'ordered' as const } : p
+      ));
+
+      const { error } = await supabase
+        .from('purchases')
+        .update({ status: 'ordered' })
+        .eq('id', purchase.id);
+
+      if (error) {
+        // Rollback on error
+        setPurchases(prev => prev.map(p =>
+          p.id === purchase.id ? purchase : p
+        ));
+        throw error;
+      }
+
+      toast.success('Purchase order approved');
+    } catch (error) {
+      console.error('Error approving purchase:', error);
+      toast.error('Failed to approve purchase');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -598,6 +631,15 @@ export default function Purchases() {
                       >
                         View
                       </button>
+                      {purchase.status === 'draft' && user?.role === 'admin' && (
+                        <button
+                          onClick={() => handleApprovePurchase(purchase)}
+                          disabled={approvingId === purchase.id}
+                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed mr-4"
+                        >
+                          {approvingId === purchase.id ? 'Approving...' : 'Approve'}
+                        </button>
+                      )}
                       {purchase.status === 'ordered' && (
                         <button
                           onClick={() => handleReceivePurchase(purchase)}

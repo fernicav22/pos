@@ -99,25 +99,27 @@ export default function Reports() {
       setLoading(true);
       const { start, end } = getDateRange();
 
-      // Fetch sales summary
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('total')
-        .gte('created_at', start)
-        .lte('created_at', end)
-        .eq('payment_status', 'completed');
+      // Managers only get item/inventory reporting, not sales totals
+      if (!isManager) {
+        const { data: salesData, error: salesError } = await supabase
+          .from('sales')
+          .select('total')
+          .gte('created_at', start)
+          .lte('created_at', end)
+          .eq('payment_status', 'completed');
 
-      if (salesError) throw salesError;
+        if (salesError) throw salesError;
 
-      const totalSales = salesData?.reduce((sum, sale) => sum + Number(sale.total), 0) || 0;
-      const totalTransactions = salesData?.length || 0;
-      const averageOrderValue = totalTransactions > 0 ? totalSales / totalTransactions : 0;
+        const totalSales = salesData?.reduce((sum, sale) => sum + Number(sale.total), 0) || 0;
+        const totalTransactions = salesData?.length || 0;
+        const averageOrderValue = totalTransactions > 0 ? totalSales / totalTransactions : 0;
 
-      setSalesSummary({
-        totalSales,
-        totalTransactions,
-        averageOrderValue
-      });
+        setSalesSummary({
+          totalSales,
+          totalTransactions,
+          averageOrderValue
+        });
+      }
 
       // Fetch top products
       const { data: productsData, error: productsError } = await supabase
@@ -196,47 +198,49 @@ export default function Reports() {
         totalInventoryValue
       });
 
-      // Fetch top customers
-      const { data: customersData, error: customersError } = await supabase
-        .from('sales')
-        .select(`
-          customer_id,
-          total,
-          created_at,
-          customer:customers(first_name, last_name)
-        `)
-        .not('customer_id', 'is', null)
-        .gte('created_at', start)
-        .lte('created_at', end)
-        .eq('payment_status', 'completed');
+      // Fetch top customers (not shown to managers, who only see item/inventory reports)
+      if (!isManager) {
+        const { data: customersData, error: customersError } = await supabase
+          .from('sales')
+          .select(`
+            customer_id,
+            total,
+            created_at,
+            customer:customers(first_name, last_name)
+          `)
+          .not('customer_id', 'is', null)
+          .gte('created_at', start)
+          .lte('created_at', end)
+          .eq('payment_status', 'completed');
 
-      if (customersError) throw customersError;
+        if (customersError) throw customersError;
 
-      const customerSummary = customersData.reduce((acc: { [key: string]: CustomerSummary }, sale) => {
-        const customerId = sale.customer_id;
-        if (!acc[customerId]) {
-          acc[customerId] = {
-            id: customerId,
-            firstName: sale.customer.first_name,
-            lastName: sale.customer.last_name,
-            totalPurchases: 0,
-            totalSpent: 0,
-            lastPurchase: sale.created_at
-          };
-        }
-        acc[customerId].totalPurchases += 1;
-        acc[customerId].totalSpent += Number(sale.total);
-        acc[customerId].lastPurchase = new Date(sale.created_at) > new Date(acc[customerId].lastPurchase)
-          ? sale.created_at
-          : acc[customerId].lastPurchase;
-        return acc;
-      }, {});
+        const customerSummary = customersData.reduce((acc: { [key: string]: CustomerSummary }, sale) => {
+          const customerId = sale.customer_id;
+          if (!acc[customerId]) {
+            acc[customerId] = {
+              id: customerId,
+              firstName: sale.customer.first_name,
+              lastName: sale.customer.last_name,
+              totalPurchases: 0,
+              totalSpent: 0,
+              lastPurchase: sale.created_at
+            };
+          }
+          acc[customerId].totalPurchases += 1;
+          acc[customerId].totalSpent += Number(sale.total);
+          acc[customerId].lastPurchase = new Date(sale.created_at) > new Date(acc[customerId].lastPurchase)
+            ? sale.created_at
+            : acc[customerId].lastPurchase;
+          return acc;
+        }, {});
 
-      setTopCustomers(
-        Object.values(customerSummary)
-          .sort((a, b) => b.totalSpent - a.totalSpent)
-          .slice(0, 5)
-      );
+        setTopCustomers(
+          Object.values(customerSummary)
+            .sort((a, b) => b.totalSpent - a.totalSpent)
+            .slice(0, 5)
+        );
+      }
 
     } catch (error) {
       console.error('Error fetching report data:', error);
@@ -284,33 +288,35 @@ export default function Reports() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-              <DollarSign className="h-6 w-6" />
+        {!isManager && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-blue-100 text-blue-600">
+                <DollarSign className="h-6 w-6" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Total Sales</p>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {loading ? (
+                    <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
+                  ) : (
+                    formatCurrency(salesSummary.totalSales)
+                  )}
+                </h3>
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Total Sales</p>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {loading ? (
-                  <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
-                ) : (
-                  formatCurrency(salesSummary.totalSales)
-                )}
-              </h3>
+            <div className="mt-4">
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>Transactions</span>
+                <span>{salesSummary.totalTransactions}</span>
+              </div>
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>Avg. Order Value</span>
+                <span>{formatCurrency(salesSummary.averageOrderValue)}</span>
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <div className="flex justify-between text-sm text-gray-500">
-              <span>Transactions</span>
-              <span>{salesSummary.totalTransactions}</span>
-            </div>
-            <div className="flex justify-between text-sm text-gray-500">
-              <span>Avg. Order Value</span>
-              <span>{formatCurrency(salesSummary.averageOrderValue)}</span>
-            </div>
-          </div>
-        </div>
+        )}
 
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
@@ -340,7 +346,7 @@ export default function Reports() {
                 <div key={product.id} className="flex justify-between text-sm">
                   <span className="text-gray-500 truncate">{product.name}</span>
                   <span className="text-gray-900 font-medium">
-                    {formatCurrency(product.revenue)}
+                    {isManager ? `${product.quantitySold} sold` : formatCurrency(product.revenue)}
                   </span>
                 </div>
               ))
@@ -348,43 +354,45 @@ export default function Reports() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-purple-100 text-purple-600">
-              <Users className="h-6 w-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Top Customers</p>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {loading ? (
-                  <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
-                ) : (
-                  `${topCustomers.length} Customers`
-                )}
-              </h3>
-            </div>
-          </div>
-          <div className="mt-4 space-y-2">
-            {loading ? (
-              <div className="space-y-2">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 animate-pulse rounded"></div>
-                ))}
+        {!isManager && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-purple-100 text-purple-600">
+                <Users className="h-6 w-6" />
               </div>
-            ) : (
-              topCustomers.slice(0, 3).map(customer => (
-                <div key={customer.id} className="flex justify-between text-sm">
-                  <span className="text-gray-500 truncate">
-                    {`${customer.firstName} ${customer.lastName}`}
-                  </span>
-                  <span className="text-gray-900 font-medium">
-                    {formatCurrency(customer.totalSpent)}
-                  </span>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Top Customers</p>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {loading ? (
+                    <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
+                  ) : (
+                    `${topCustomers.length} Customers`
+                  )}
+                </h3>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {loading ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-4 bg-gray-200 animate-pulse rounded"></div>
+                  ))}
                 </div>
-              ))
-            )}
+              ) : (
+                topCustomers.slice(0, 3).map(customer => (
+                  <div key={customer.id} className="flex justify-between text-sm">
+                    <span className="text-gray-500 truncate">
+                      {`${customer.firstName} ${customer.lastName}`}
+                    </span>
+                    <span className="text-gray-900 font-medium">
+                      {formatCurrency(customer.totalSpent)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {isManager && (
           <div className="bg-white rounded-lg shadow p-6">
@@ -432,14 +440,16 @@ export default function Reports() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sold</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  {!isManager && (
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   [...Array(5)].map((_, i) => (
                     <tr key={i}>
-                      <td colSpan={3} className="px-4 py-3">
+                      <td colSpan={isManager ? 2 : 3} className="px-4 py-3">
                         <div className="h-4 bg-gray-200 animate-pulse rounded"></div>
                       </td>
                     </tr>
@@ -449,9 +459,11 @@ export default function Reports() {
                     <tr key={product.id}>
                       <td className="px-4 py-3 text-sm text-gray-900">{product.name}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">{product.quantitySold}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {formatCurrency(product.revenue)}
-                      </td>
+                      {!isManager && (
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                          {formatCurrency(product.revenue)}
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -506,56 +518,60 @@ export default function Reports() {
         </div>
 
         {/* Customer Analysis */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Top Customers</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Orders</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Spent</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr key={i}>
-                      <td colSpan={3} className="px-4 py-3">
-                        <div className="h-4 bg-gray-200 animate-pulse rounded"></div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  topCustomers.map(customer => (
-                    <tr key={customer.id}>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {`${customer.firstName} ${customer.lastName}`}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {customer.totalPurchases}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {formatCurrency(customer.totalSpent)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Sales Trends */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Sales Overview</h2>
-          <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
-            <div className="text-center text-gray-500">
-              <BarChart className="h-8 w-8 mx-auto mb-2" />
-              <p>Sales chart visualization coming soon</p>
+        {!isManager && (
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Top Customers</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Orders</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Spent</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {loading ? (
+                    [...Array(5)].map((_, i) => (
+                      <tr key={i}>
+                        <td colSpan={3} className="px-4 py-3">
+                          <div className="h-4 bg-gray-200 animate-pulse rounded"></div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    topCustomers.map(customer => (
+                      <tr key={customer.id}>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {`${customer.firstName} ${customer.lastName}`}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                          {customer.totalPurchases}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                          {formatCurrency(customer.totalSpent)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Sales Trends */}
+        {!isManager && (
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Sales Overview</h2>
+            <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
+              <div className="text-center text-gray-500">
+                <BarChart className="h-8 w-8 mx-auto mb-2" />
+                <p>Sales chart visualization coming soon</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
