@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useSettingsStore } from '../store/settingsStore';
-import { BarChart, LineChart, PieChart, TrendingUp, Package, Users, DollarSign } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
+import { BarChart, LineChart, PieChart, TrendingUp, Package, Users, DollarSign, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface SalesSummary {
   totalSales: number;
   totalTransactions: number;
   averageOrderValue: number;
+}
+
+interface InventoryStats {
+  totalProducts: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  totalInventoryValue: number;
 }
 
 interface ProductSummary {
@@ -30,6 +38,7 @@ interface CustomerSummary {
 
 export default function Reports() {
   const { formatCurrency } = useSettingsStore();
+  const { user } = useAuthStore();
   const [timeRange, setTimeRange] = useState('7days');
   const [loading, setLoading] = useState(true);
   const [customDateRange, setCustomDateRange] = useState({
@@ -44,6 +53,13 @@ export default function Reports() {
   const [topProducts, setTopProducts] = useState<ProductSummary[]>([]);
   const [topCustomers, setTopCustomers] = useState<CustomerSummary[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<ProductSummary[]>([]);
+  const [inventoryStats, setInventoryStats] = useState<InventoryStats>({
+    totalProducts: 0,
+    lowStockCount: 0,
+    outOfStockCount: 0,
+    totalInventoryValue: 0
+  });
+  const isManager = user?.role === 'manager';
 
   useEffect(() => {
     fetchReportData();
@@ -160,6 +176,26 @@ export default function Reports() {
         }))
       );
 
+      // Fetch inventory overview (manager-oriented stock reporting)
+      const { data: allProductsData, error: allProductsError } = await supabase
+        .from('products')
+        .select('id, stock_quantity, cost');
+
+      if (allProductsError) throw allProductsError;
+
+      const outOfStockCount = allProductsData?.filter(p => p.stock_quantity === 0).length || 0;
+      const totalInventoryValue = allProductsData?.reduce(
+        (sum, p) => sum + (Number(p.cost) || 0) * (p.stock_quantity || 0),
+        0
+      ) || 0;
+
+      setInventoryStats({
+        totalProducts: allProductsData?.length || 0,
+        lowStockCount: lowStockData.filter(p => p.stock_quantity > 0).length,
+        outOfStockCount,
+        totalInventoryValue
+      });
+
       // Fetch top customers
       const { data: customersData, error: customersError } = await supabase
         .from('sales')
@@ -247,7 +283,7 @@ export default function Reports() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-blue-100 text-blue-600">
@@ -349,6 +385,40 @@ export default function Reports() {
             )}
           </div>
         </div>
+
+        {isManager && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-3 rounded-full bg-orange-100 text-orange-600">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Inventory Overview</p>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {loading ? (
+                    <div className="h-6 w-24 bg-gray-200 animate-pulse rounded"></div>
+                  ) : (
+                    `${inventoryStats.totalProducts} Products`
+                  )}
+                </h3>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Low Stock</span>
+                <span className="text-yellow-700 font-medium">{inventoryStats.lowStockCount}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Out of Stock</span>
+                <span className="text-red-700 font-medium">{inventoryStats.outOfStockCount}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Inventory Value</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(inventoryStats.totalInventoryValue)}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Detailed Reports */}

@@ -185,8 +185,22 @@ function Transactions() {
         query = query
           .gte('created_at', today.toISOString())
           .lt('created_at', tomorrow.toISOString());
+      } else if (user?.role === 'manager') {
+        // Managers can see all cashiers' transactions but only for today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        query = query
+          .gte('created_at', today.toISOString())
+          .lt('created_at', tomorrow.toISOString());
+
+        if (status !== 'all') {
+          query = query.eq('payment_status', status);
+        }
       } else {
-        // For non-cashier roles, apply the status filter
+        // Admin: apply the status filter
         if (status !== 'all') {
           query = query.eq('payment_status', status);
         }
@@ -425,7 +439,12 @@ function Transactions() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-        <h1 className="text-2xl font-semibold text-gray-900">Transactions</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Transactions</h1>
+          {(user?.role === 'manager' || user?.role === 'cashier') && (
+            <p className="text-sm text-gray-500">Showing today's transactions only</p>
+          )}
+        </div>
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
           <select
             value={status}
@@ -437,12 +456,14 @@ function Transactions() {
             <option value="refunded">Refunded</option>
             <option value="partially_refunded">Partially Refunded</option>
           </select>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
+          {user?.role === 'admin' && (
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+          )}
         </div>
       </div>
 

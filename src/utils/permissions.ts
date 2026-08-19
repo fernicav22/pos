@@ -27,7 +27,7 @@ export const rolePermissions: Record<UserRole, {
   },
   manager: {
     canAccessPOS: true,
-    canAccessProducts: true,
+    canAccessProducts: false,
     canAccessCustomers: true,
     canAccessPurchases: true,
     canAccessReports: true,

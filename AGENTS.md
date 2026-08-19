@@ -61,8 +61,8 @@ Permission functions include:
 - `canAccessPOS` — admin, manager, cashier, customer
 - `canCompleteSales` — admin, manager, cashier (customer = false)
 - `canViewQuantities` — admin, manager, cashier (customer = false)
-- `canAccessProducts` — admin, manager only
-- `canAccessTransactions` — not customer
+- `canAccessProducts` — admin only (manager access removed)
+- `canAccessTransactions` — not customer; manager and cashier are restricted to today's transactions only (no free date range)
 
 Customer role:
 - Can access POS

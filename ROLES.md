@@ -24,13 +24,13 @@ Limited access - focused on sales
 - ❌ Settings
 
 ### 🟡 Manager
-Full operational access - no system administration
+Limited operational access - no system administration
 - ✅ POS (Point of Sale)
-- ✅ Products
+- ❌ Products
 - ✅ Customers
 - ✅ Purchases
-- ✅ Reports
-- ✅ Transactions
+- ✅ Reports (inventory-oriented: includes a stock/inventory overview card, since managers no longer have direct Products page access)
+- ✅ Transactions (limited to today's date only; cannot view other days, no free date range picker)
 - ✅ Dashboard
 - ❌ Staff
 - ❌ Settings
@@ -52,8 +52,8 @@ Purpose: Training mode / customer-facing iPad
 - `canAccessPOS`: admin, manager, cashier, customer
 - `canCompleteSales`: admin, manager, cashier (customer = false)
 - `canViewQuantities`: admin, manager, cashier (customer = false)
-- `canAccessProducts`: admin, manager (cashier/customer = false)
-- `canAccessTransactions`: admin, manager, cashier (customer = false)
+- `canAccessProducts`: admin only (cashier/manager/customer = false)
+- `canAccessTransactions`: admin, manager, cashier (customer = false); manager and cashier are restricted to today's transactions only
 
 Implementation reference: `src/utils/permissions.ts` contains the `rolePermissions` object and permission checks.
 
