@@ -6,7 +6,7 @@ import { UserRole } from '../types';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  permission: 'canAccessPOS' | 'canAccessProducts' | 'canAccessCustomers' | 'canAccessPurchases' | 'canAccessReports' | 'canAccessTransactions' | 'canAccessStaff' | 'canAccessSettings';
+  permission: 'canAccessPOS' | 'canAccessProducts' | 'canAccessCustomers' | 'canAccessPurchases' | 'canAccessReports' | 'canAccessTransactions' | 'canAccessShipments' | 'canAccessStaff' | 'canAccessSettings';
 }
 
 export default function ProtectedRoute({ children, permission }: ProtectedRouteProps) {

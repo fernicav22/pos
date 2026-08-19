@@ -14,6 +14,7 @@ The POS system has 4 user roles with different permissions: `admin`, `manager`, 
 ### 🔴 Cashier
 Limited access - focused on sales
 - ✅ POS (Point of Sale)
+- ✅ Shipments
 - ✅ Customers
 - ✅ Transactions
 - ✅ Dashboard
@@ -26,6 +27,7 @@ Limited access - focused on sales
 ### 🟡 Manager
 Limited operational access - no system administration
 - ✅ POS (Point of Sale)
+- ✅ Shipments
 - ❌ Products
 - ✅ Customers
 - ✅ Purchases
@@ -37,7 +39,7 @@ Limited operational access - no system administration
 
 ### 🟢 Admin
 Full access to everything
-- ✅ All pages (POS, Products, Customers, Purchases, Reports, Transactions, Staff, Settings, Dashboard)
+- ✅ All pages (POS, Shipments, Products, Customers, Purchases, Reports, Transactions, Staff, Settings, Dashboard)
 - ✅ Can approve a manager-created ("draft" status) purchase order via an "Approve" button on the Purchases page, moving it to "ordered" without needing to recreate it
 
 ### 🔵 Customer (new role)
@@ -47,6 +49,7 @@ Purpose: Training mode / customer-facing iPad
 - ✅ Can create draft orders
 - ❌ Cannot complete sales / payments
 - ❌ Cannot access transactions
+- ❌ Cannot access shipments
 - ❌ Cannot see exact stock quantities
 
 ## Permission Matrix (summary)
@@ -55,6 +58,15 @@ Purpose: Training mode / customer-facing iPad
 - `canViewQuantities`: admin, manager, cashier (customer = false)
 - `canAccessProducts`: admin only (cashier/manager/customer = false)
 - `canAccessTransactions`: admin, manager, cashier (customer = false); manager and cashier are restricted to today's transactions only
+- `canAccessShipments`: admin, manager, cashier (customer = false), no date restriction
+
+## Shipments / Logistics Module
+- New tab "Shipments", positioned right after "Point of Sale" in the sidebar, visible to admin/manager/cashier only (same access as Transactions - no customer access).
+- Tables: `shipments` and `shipment_items` (see `supabase/migrations/20260819000001_create_shipments.sql`). Optionally references an existing `sales` row (autofills customer + items + advance paid) and, for `sobre_pedido` (made-to-order) shipments, an existing `purchases` row once material sourcing starts. No sales/purchases/products data is duplicated - only referenced by ID.
+- A shipment has exactly one `type`: `local` (from stock) or `sobre_pedido` (made to order) - a single shipment cannot mix both (confirmed decision, not auto-detected).
+- Status flow: `pendiente` → (`comprando_material`, sobre_pedido only) → `preparando_pedido` → `en_ruta` → `entregado`, with `cancelado` reachable from any non-terminal status.
+- The courier ("repartidor") picker is restricted to staff users (admin/manager/cashier), never customer.
+- Optional delivery evidence photo is stored in a private Supabase Storage bucket (`delivery-proofs`). There is no server-side TTL/cron in this project; photos older than 15 days are pruned opportunistically on the client each time the Shipments page loads (`cleanupExpiredDeliveryProofs` in `src/pages/Shipments.tsx`) - a known limitation, not a guaranteed hard deadline if the page isn't opened.
 
 Implementation reference: `src/utils/permissions.ts` contains the `rolePermissions` object and permission checks.
 

@@ -10,7 +10,8 @@ import {
   Receipt,
   UserCircle,
   X,
-  Truck
+  Truck,
+  Send
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -20,6 +21,7 @@ interface SidebarProps {
 
 const navigation = [
   { name: 'Point of Sale', icon: ShoppingCart, path: '/pos', role: ['admin', 'manager', 'cashier', 'customer'] },
+  { name: 'Shipments', icon: Send, path: '/shipments', role: ['admin', 'manager', 'cashier'] },
   { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', role: ['admin', 'manager', 'cashier'] },
   { name: 'Products', icon: Package, path: '/products', role: ['admin'] },
   { name: 'Customers', icon: Users, path: '/customers', role: ['admin', 'manager', 'cashier'] },

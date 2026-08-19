@@ -13,6 +13,7 @@ import Transactions from './pages/Transactions';
 import Staff from './pages/Staff';
 import Settings from './pages/Settings';
 import Purchases from './pages/Purchases';
+import Shipments from './pages/Shipments';
 import { useAuthStore } from './store/authStore';
 import { useSettingsStore } from './store/settingsStore';
 import { setupPeriodicCleanup } from './utils/memoryOptimization';
@@ -108,6 +109,11 @@ function App() {
           <Route path="pos" element={
             <ProtectedRoute permission="canAccessPOS">
               <POS />
+            </ProtectedRoute>
+          } />
+          <Route path="shipments" element={
+            <ProtectedRoute permission="canAccessShipments">
+              <Shipments />
             </ProtectedRoute>
           } />
           <Route path="products" element={

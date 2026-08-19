@@ -46,13 +46,14 @@ POS system. React 18 + TypeScript + Vite + Supabase (Postgres, RLS, Auth). State
   - POS page: 100 products
   - Transactions page: 100
   - Products page: 200
+  - Shipments page: 200
 
 ## Database conventions
 - Migration filenames use timestamp prefix + underscore + descriptive slug, e.g. `20251205000002_create_draft_orders.sql`.
-- RLS is enabled per table via `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, observed on tables such as `users`, `categories`, `products`, `customers`, `sales`, `store_settings`, `draft_orders`.
-- Policies are defined with `CREATE POLICY "..." ON table_name`.
+- RLS is enabled per table via `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, observed on tables such as `users`, `categories`, `products`, `customers`, `sales`, `store_settings`, `draft_orders`, `shipments`, `shipment_items`.
+- Policies are defined with `CREATE POLICY "..." ON table_name`. Older policies check role via `EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND role IN (...))`; migrations from `20251219000001_optimize_auth_performance.sql` onward switched to `auth.jwt() ->> 'role' IN (...)` (reads the role JWT claim directly, avoids a subquery and recursive-policy issues) — use the JWT form for new policies.
 - Indexes commonly use `CREATE INDEX IF NOT EXISTS`.
-- `updated_at` columns use `CREATE TRIGGER` for auto-update behavior.
+- `updated_at` columns use `CREATE TRIGGER ... EXECUTE FUNCTION update_updated_at_optimized()` for auto-update behavior (the current preferred trigger function, applied via `20251206000003_optimize_postgrest_operations.sql`).
 
 ## Roles & permissions
 Roles: `admin`, `manager`, `cashier`, `customer`.
@@ -63,6 +64,7 @@ Permission functions include:
 - `canViewQuantities` — admin, manager, cashier (customer = false)
 - `canAccessProducts` — admin only (manager access removed)
 - `canAccessTransactions` — not customer; manager and cashier are restricted to today's transactions only (no free date range)
+- `canAccessShipments` — admin, manager, cashier (customer = false), no date restriction
 
 Customer role:
 - Can access POS
@@ -97,6 +99,7 @@ Draft orders table fields:
 - Memory monitoring only works in Chrome (`performance.memory`); degrades gracefully elsewhere.
 - No offline support — requires an active connection.
 - No real-time sync between users — manual refresh needed to see others’ changes.
+- Delivery evidence photos (Shipments module) live in a private Storage bucket with no server-side TTL/cron; expired (>15 day) photos are only pruned client-side when someone opens the Shipments page — best-effort, not a guaranteed hard deadline.
 
 Because this codebase lacks automated tests today, verification rules should be treated as more important than in a tested codebase.
 

@@ -8,6 +8,7 @@ export const rolePermissions: Record<UserRole, {
   canAccessPurchases: boolean;
   canAccessReports: boolean;
   canAccessTransactions: boolean;
+  canAccessShipments: boolean;
   canAccessStaff: boolean;
   canAccessSettings: boolean;
   canCompleteSales: boolean;
@@ -20,6 +21,7 @@ export const rolePermissions: Record<UserRole, {
     canAccessPurchases: true,
     canAccessReports: true,
     canAccessTransactions: true,
+    canAccessShipments: true,
     canAccessStaff: true,
     canAccessSettings: true,
     canCompleteSales: true,
@@ -32,6 +34,7 @@ export const rolePermissions: Record<UserRole, {
     canAccessPurchases: true,
     canAccessReports: true,
     canAccessTransactions: true,
+    canAccessShipments: true,
     canAccessStaff: false,
     canAccessSettings: false,
     canCompleteSales: true,
@@ -44,6 +47,7 @@ export const rolePermissions: Record<UserRole, {
     canAccessPurchases: false,
     canAccessReports: false,
     canAccessTransactions: true,
+    canAccessShipments: true,
     canAccessStaff: false,
     canAccessSettings: false,
     canCompleteSales: true,
@@ -56,6 +60,7 @@ export const rolePermissions: Record<UserRole, {
     canAccessPurchases: false,
     canAccessReports: false,
     canAccessTransactions: false,
+    canAccessShipments: false,
     canAccessStaff: false,
     canAccessSettings: false,
     canCompleteSales: false,
