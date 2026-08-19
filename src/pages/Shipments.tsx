@@ -86,6 +86,10 @@ interface ItemFormRow {
   product_id: string;
   quantity: number;
   notes: string;
+  // Locked to the price actually charged when copied from a linked sale or
+  // an existing shipment being edited; undefined only for brand-new rows,
+  // which fall back to the live catalog price.
+  unit_price?: number;
 }
 
 interface ShipmentFormData {
@@ -384,9 +388,9 @@ export default function Shipments() {
   const calculateSubtotal = useCallback(() => {
     return roundCurrency(
       formData.items.reduce((sum, item) => {
-        const product = products.find(p => p.id === item.product_id);
+        const unitPrice = item.unit_price ?? products.find(p => p.id === item.product_id)?.price ?? 0;
         const quantity = isNaN(item.quantity) ? 0 : item.quantity;
-        return sum + (product ? product.price * quantity : 0);
+        return sum + unitPrice * quantity;
       }, 0)
     );
   }, [formData.items, products]);
@@ -431,7 +435,12 @@ export default function Shipments() {
   const handleItemChange = useCallback((index: number, field: keyof ItemFormRow, value: string | number) => {
     setFormData(prev => ({
       ...prev,
-      items: prev.items.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+      items: prev.items.map((item, i) => {
+        if (i !== index) return item;
+        // Changing the product invalidates any locked historical price.
+        if (field === 'product_id') return { ...item, product_id: value as string, unit_price: undefined };
+        return { ...item, [field]: value };
+      }),
     }));
   }, []);
 
@@ -442,7 +451,7 @@ export default function Shipments() {
       customer_name: sale.customer ? `${sale.customer.first_name} ${sale.customer.last_name}`.trim() : prev.customer_name,
       customer_phone: sale.customer?.phone || prev.customer_phone,
       advance_paid: sale.total,
-      items: sale.sale_items.map(si => ({ product_id: si.product_id, quantity: si.quantity, notes: '' })),
+      items: sale.sale_items.map(si => ({ product_id: si.product_id, quantity: si.quantity, notes: '', unit_price: si.price })),
     }));
   };
 
@@ -467,7 +476,7 @@ export default function Shipments() {
     try {
       const { data, error } = await supabase
         .from('shipment_items')
-        .select('product_id, quantity, notes')
+        .select('product_id, quantity, notes, unit_price')
         .eq('shipment_id', shipment.id);
       if (error) throw error;
 
@@ -481,10 +490,11 @@ export default function Shipments() {
         priority: shipment.priority,
         shipping_cost: shipment.shipping_cost,
         advance_paid: shipment.advance_paid,
-        items: (data || []).map((i: { product_id: string; quantity: number; notes: string | null }) => ({
+        items: (data || []).map((i: { product_id: string; quantity: number; notes: string | null; unit_price: number }) => ({
           product_id: i.product_id,
           quantity: i.quantity,
           notes: i.notes || '',
+          unit_price: i.unit_price,
         })),
       });
       setEditingShipment(shipment);
@@ -553,7 +563,7 @@ export default function Shipments() {
             shipment_id: editingShipment.id,
             product_id: item.product_id,
             quantity: item.quantity,
-            unit_price: products.find(p => p.id === item.product_id)?.price ?? 0,
+            unit_price: item.unit_price ?? products.find(p => p.id === item.product_id)?.price ?? 0,
             notes: item.notes.trim() || null,
           }))
         );
@@ -591,7 +601,7 @@ export default function Shipments() {
             shipment_id: shipment.id,
             product_id: item.product_id,
             quantity: item.quantity,
-            unit_price: products.find(p => p.id === item.product_id)?.price ?? 0,
+            unit_price: item.unit_price ?? products.find(p => p.id === item.product_id)?.price ?? 0,
             notes: item.notes.trim() || null,
           }))
         );
@@ -1255,6 +1265,11 @@ export default function Shipments() {
                                 placeholder="Notes (optional)"
                                 className="mt-2 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-blue-500 focus:ring-blue-500"
                               />
+                              {item.unit_price !== undefined && (
+                                <p className="mt-1 text-xs text-gray-400">
+                                  Priced at {formatCurrency(item.unit_price)} (from the linked sale/shipment, not the current catalog price)
+                                </p>
+                              )}
                             </div>
                             <div className="w-24">
                               <input
@@ -1268,7 +1283,9 @@ export default function Shipments() {
                               />
                             </div>
                             <div className="w-32 text-right font-medium">
-                              {formatCurrency((product?.price || 0) * (isNaN(item.quantity) ? 0 : item.quantity))}
+                              {formatCurrency(
+                                (item.unit_price ?? product?.price ?? 0) * (isNaN(item.quantity) ? 0 : item.quantity)
+                              )}
                             </div>
                             <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-600 hover:text-red-800">
                               <Trash2 className="h-5 w-5" />
