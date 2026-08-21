@@ -79,6 +79,7 @@ export default function Purchases() {
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [isSavingSupplier, setIsSavingSupplier] = useState(false);
   const [newSupplierData, setNewSupplierData] = useState({ name: '', phone: '', email: '' });
@@ -345,6 +346,41 @@ export default function Purchases() {
       toast.error('Failed to receive purchase');
     } finally {
       setReceivingId(null);
+    }
+  };
+
+  const handleDeletePurchase = async (purchase: Purchase) => {
+    if (deletingId) return; // prevent duplicate deletes from a double click
+    if (!confirm(`Delete purchase order ${purchase.reference_number || purchase.id}? This cannot be undone.`)) {
+      return;
+    }
+    setDeletingId(purchase.id);
+
+    try {
+      // Optimistic update: remove from state immediately
+      setPurchases(prev => prev.filter(p => p.id !== purchase.id));
+
+      // RLS "Admin and managers can modify purchases" (FOR ALL) already lets admin
+      // delete rows created by manager users - not scoped by created_by/user_id.
+      const { error } = await supabase
+        .from('purchases')
+        .delete()
+        .eq('id', purchase.id);
+
+      if (error) {
+        // Rollback on error
+        setPurchases(prev => [...prev, purchase].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ));
+        throw error;
+      }
+
+      toast.success('Purchase order deleted');
+    } catch (error) {
+      console.error('Error deleting purchase:', error);
+      toast.error('Failed to delete purchase order');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -644,9 +680,18 @@ export default function Purchases() {
                         <button
                           onClick={() => handleReceivePurchase(purchase)}
                           disabled={receivingId === purchase.id}
-                          className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed mr-4"
                         >
                           {receivingId === purchase.id ? 'Receiving...' : 'Receive'}
+                        </button>
+                      )}
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={() => handleDeletePurchase(purchase)}
+                          disabled={deletingId === purchase.id}
+                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {deletingId === purchase.id ? 'Deleting...' : 'Delete'}
                         </button>
                       )}
                     </td>
