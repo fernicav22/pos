@@ -351,6 +351,11 @@ export default function Purchases() {
 
   const handleDeletePurchase = async (purchase: Purchase) => {
     if (deletingId) return; // prevent duplicate deletes from a double click
+    if (purchase.status !== 'draft') {
+      // Once approved, deletion is intentionally not exposed in the UI - use direct DB access instead.
+      toast.error('Only draft purchase orders can be deleted here');
+      return;
+    }
     if (!confirm(`Delete purchase order ${purchase.reference_number || purchase.id}? This cannot be undone.`)) {
       return;
     }
@@ -365,7 +370,8 @@ export default function Purchases() {
       const { error } = await supabase
         .from('purchases')
         .delete()
-        .eq('id', purchase.id);
+        .eq('id', purchase.id)
+        .eq('status', 'draft');
 
       if (error) {
         // Rollback on error
@@ -685,7 +691,7 @@ export default function Purchases() {
                           {receivingId === purchase.id ? 'Receiving...' : 'Receive'}
                         </button>
                       )}
-                      {user?.role === 'admin' && (
+                      {purchase.status === 'draft' && user?.role === 'admin' && (
                         <button
                           onClick={() => handleDeletePurchase(purchase)}
                           disabled={deletingId === purchase.id}
