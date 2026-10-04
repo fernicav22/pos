@@ -38,6 +38,8 @@ interface PurchaseOption {
 
 interface SaleOption {
   id: string;
+  subtotal: number;
+  shipping: number;
   total: number;
   created_at: string;
   customer: { first_name: string; last_name: string; phone: string | null } | null;
@@ -271,7 +273,7 @@ export default function Shipments() {
       const { data, error } = await supabase
         .from('sales')
         .select(`
-          id, total, created_at,
+          id, subtotal, shipping, total, created_at,
           customer:customers(first_name, last_name, phone),
           sale_items(product_id, quantity, price, product:products(name))
         `)
@@ -450,7 +452,11 @@ export default function Shipments() {
       ...prev,
       customer_name: sale.customer ? `${sale.customer.first_name} ${sale.customer.last_name}`.trim() : prev.customer_name,
       customer_phone: sale.customer?.phone || prev.customer_phone,
-      advance_paid: sale.total,
+      // Shipments don't carry a tax line, so the advance must cover only what the
+      // shipment total covers (items + shipping). Using sale.total (which includes
+      // tax) made Amount Due go negative by the tax amount.
+      shipping_cost: sale.shipping || 0,
+      advance_paid: roundCurrency((sale.subtotal || 0) + (sale.shipping || 0)),
       items: sale.sale_items.map(si => ({ product_id: si.product_id, quantity: si.quantity, notes: '', unit_price: si.price })),
     }));
   };
