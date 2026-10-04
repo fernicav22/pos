@@ -11,7 +11,9 @@ import {
   UserCircle,
   X,
   Truck,
-  Send
+  Send,
+  ClipboardCheck,
+  ShieldAlert
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,6 +25,8 @@ const navigation = [
   { name: 'Point of Sale', icon: ShoppingCart, path: '/pos', role: ['admin', 'manager', 'cashier', 'customer'] },
   { name: 'Shipments', icon: Send, path: '/shipments', role: ['admin', 'manager', 'cashier'] },
   { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', role: ['admin', 'manager', 'cashier'] },
+  { name: 'Gerencia', icon: ClipboardCheck, path: '/manager', role: ['admin', 'manager'] },
+  { name: 'Admin', icon: ShieldAlert, path: '/admin', role: ['admin'] },
   { name: 'Products', icon: Package, path: '/products', role: ['admin'] },
   { name: 'Customers', icon: Users, path: '/customers', role: ['admin', 'manager', 'cashier'] },
   { name: 'Purchases', icon: Truck, path: '/purchases', role: ['admin', 'manager'] },

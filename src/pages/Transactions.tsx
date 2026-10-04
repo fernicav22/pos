@@ -14,10 +14,7 @@ interface Transaction {
   payment_method: string;
   payment_status: string;
   customer_id: string | null;
-  user: {
-    first_name: string;
-    last_name: string;
-  } | null;
+  user_id: string;
   customer?: {
     first_name: string;
     last_name: string;
@@ -70,6 +67,33 @@ function Transactions() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [staffDirectory, setStaffDirectory] = useState<Record<string, { first_name: string; last_name: string }>>({});
+
+  // Admin/manager only: get_staff_directory() never opens the users table directly
+  // (manager's own RLS on users only exposes their own row).
+  useEffect(() => {
+    if (user?.role !== 'admin' && user?.role !== 'manager') return;
+    let cancelled = false;
+    supabase.rpc('get_staff_directory').then(({ data, error }) => {
+      if (cancelled || error || !data) return;
+      const map: Record<string, { first_name: string; last_name: string }> = {};
+      for (const s of data as { id: string; first_name: string; last_name: string }[]) {
+        map[s.id] = { first_name: s.first_name, last_name: s.last_name };
+      }
+      setStaffDirectory(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role]);
+
+  const getSellerName = useCallback((userId: string): string => {
+    if (user && user.id === userId) {
+      return `${user.firstName} ${user.lastName}`.trim();
+    }
+    const staff = staffDirectory[userId];
+    return staff ? `${staff.first_name} ${staff.last_name}`.trim() : 'Unknown User';
+  }, [user, staffDirectory]);
 
   // Memoize filtered transactions to prevent unnecessary recalculations
   const filteredTransactions = useMemo(() => {
@@ -101,11 +125,7 @@ function Transactions() {
 
     if (searchFilters.cashier) {
       filtered = filtered.filter(t => 
-        t.user
-          ? `${t.user.first_name} ${t.user.last_name}`
-              .toLowerCase()
-              .includes(searchFilters.cashier.toLowerCase())
-          : false
+        getSellerName(t.user_id).toLowerCase().includes(searchFilters.cashier.toLowerCase())
       );
     }
 
@@ -128,7 +148,7 @@ function Transactions() {
     }
 
     return filtered;
-  }, [transactions, searchFilters]);
+  }, [transactions, searchFilters, getSellerName]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -165,7 +185,6 @@ function Transactions() {
         .from('sales')
         .select(`
           *,
-          user:users(first_name, last_name),
           customer:customers(first_name, last_name)
         `)
         .order('created_at', { ascending: false })
@@ -240,7 +259,6 @@ function Transactions() {
         .from('sales')
         .select(`
           *,
-          user:users(first_name, last_name),
           customer:customers(first_name, last_name)
         `)
         .eq('id', transactionId)
@@ -330,7 +348,7 @@ function Transactions() {
     // Transaction info
     receipt += 'TRANSACTION ID: ' + (selectedTransaction?.id || '') + '\n';
     receipt += 'DATE: ' + formatDate(selectedTransaction?.created_at || new Date().toISOString()) + '\n';
-    receipt += 'CASHIER: ' + (selectedTransaction?.user ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}` : 'Unknown') + '\n';
+    receipt += 'CASHIER: ' + (selectedTransaction ? getSellerName(selectedTransaction.user_id) : 'Unknown') + '\n';
     receipt += 'CUSTOMER: ' + (selectedTransaction?.customer ? `${selectedTransaction.customer.first_name} ${selectedTransaction.customer.last_name}` : 'Walk-in') + '\n';
     receipt += '-'.repeat(lines) + '\n\n';
     
@@ -604,9 +622,7 @@ function Transactions() {
                         : 'Walk-in Customer'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {transaction.user
-                        ? `${transaction.user.first_name} ${transaction.user.last_name}`
-                        : 'Unknown User'}
+                      {getSellerName(transaction.user_id)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatCurrency(transaction.total)}
@@ -698,9 +714,7 @@ function Transactions() {
                         <div>
                           <span className="text-xs sm:text-sm text-gray-500">Cashier</span>
                           <p className="text-xs sm:text-sm font-medium text-gray-900">
-                            {selectedTransaction.user
-                              ? `${selectedTransaction.user.first_name} ${selectedTransaction.user.last_name}`
-                              : 'Unknown User'}
+                            {getSellerName(selectedTransaction.user_id)}
                           </p>
                         </div>
                       </div>

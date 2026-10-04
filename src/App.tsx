@@ -14,6 +14,8 @@ import Staff from './pages/Staff';
 import Settings from './pages/Settings';
 import Purchases from './pages/Purchases';
 import Shipments from './pages/Shipments';
+import ManagerDashboard from './pages/ManagerDashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import { useAuthStore } from './store/authStore';
 import { useSettingsStore } from './store/settingsStore';
 import { setupPeriodicCleanup } from './utils/memoryOptimization';
@@ -114,6 +116,16 @@ function App() {
           <Route path="shipments" element={
             <ProtectedRoute permission="canAccessShipments">
               <Shipments />
+            </ProtectedRoute>
+          } />
+          <Route path="manager" element={
+            <ProtectedRoute permission="canAccessManagerDashboard">
+              <ManagerDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="admin" element={
+            <ProtectedRoute permission="canAccessAdminDashboard">
+              <AdminDashboard />
             </ProtectedRoute>
           } />
           <Route path="products" element={
