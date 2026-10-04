@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
+import { BUSINESS_TZ, getBusinessToday } from '../utils/businessDate';
 
 interface InventoryReportRow {
   product_id: string;
@@ -33,11 +34,6 @@ const columns: { key: keyof InventoryReportRow; label: string }[] = [
   { key: 'sin_justificar', label: 'Sin justificar' },
 ];
 
-function localToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export default function InventoryReport() {
   const [rows, setRows] = useState<InventoryReportRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +44,8 @@ export default function InventoryReport() {
     try {
       // Computed in the database from existing data (get_daily_inventory_report); nothing is stored
       const { data, error } = await supabase.rpc('get_daily_inventory_report', {
-        p_date: localToday(),
-        p_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        p_date: getBusinessToday(),
+        p_tz: BUSINESS_TZ,
       });
       if (error) throw error;
       if (isMountedRef.current) setRows((data || []) as InventoryReportRow[]);
